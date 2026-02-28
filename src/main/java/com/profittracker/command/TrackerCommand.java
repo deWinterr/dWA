@@ -4,11 +4,9 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.profittracker.SkyblockProfitTracker;
 import com.profittracker.config.ModConfig;
-import com.profittracker.hud.HudPositionScreen;
 import com.profittracker.util.FormatUtil;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
-import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.ClickEvent;
 import net.minecraft.text.HoverEvent;
 import net.minecraft.text.Style;
@@ -53,23 +51,14 @@ public class TrackerCommand {
                             return 1;
                         }))
 
-                        .then(literal("hud")
-                                .executes(ctx -> {
-                                    // Enable HUD and open the drag-to-position screen
-                                    SkyblockProfitTracker.config.hudEnabled = true;
-                                    SkyblockProfitTracker.config.save();
-                                    MinecraftClient.getInstance().execute(() ->
-                                            MinecraftClient.getInstance().setScreen(new HudPositionScreen()));
-                                    return 1;
-                                })
-                                .then(literal("toggle").executes(ctx -> {
-                                    ModConfig config = SkyblockProfitTracker.config;
-                                    config.hudEnabled = !config.hudEnabled;
-                                    config.save();
-                                    msg(ctx.getSource()::sendFeedback,
-                                            "HUD " + (config.hudEnabled ? "\u00a7aenabled" : "\u00a7cdisabled") + "\u00a7r.");
-                                    return 1;
-                                })))
+                        .then(literal("hud").executes(ctx -> {
+                            ModConfig config = SkyblockProfitTracker.config;
+                            config.hudEnabled = !config.hudEnabled;
+                            config.save();
+                            msg(ctx.getSource()::sendFeedback,
+                                    "HUD " + (config.hudEnabled ? "\u00a7aenabled" : "\u00a7cdisabled") + "\u00a7r.");
+                            return 1;
+                        }))
 
                         .then(literal("move")
                                 .then(argument("x", IntegerArgumentType.integer(0))
@@ -189,6 +178,76 @@ public class TrackerCommand {
                                             msg(ctx.getSource()::sendFeedback, "Webhook set to: " + display);
                                             return 1;
                                         })))
+
+                        .then(literal("setprice")
+                                .then(argument("item", StringArgumentType.string())
+                                        .suggests((ctx, builder) -> {
+                                            for (String ore : com.profittracker.price.ItemPrices.ORE_NPC_PRICES.keySet()) {
+                                                builder.suggest(ore);
+                                            }
+                                            for (String gem : com.profittracker.price.ItemPrices.GEMSTONE_TYPES) {
+                                                builder.suggest(gem.toLowerCase());
+                                            }
+                                            return builder.buildFuture();
+                                        })
+                                        .then(argument("price", StringArgumentType.word())
+                                                .executes(ctx -> {
+                                                    String item = StringArgumentType.getString(ctx, "item").toLowerCase();
+                                                    try {
+                                                        double price = Double.parseDouble(StringArgumentType.getString(ctx, "price"));
+                                                        if (price < 0) {
+                                                            msg(ctx.getSource()::sendFeedback, "\u00a7cPrice must be >= 0");
+                                                            return 0;
+                                                        }
+                                                        SkyblockProfitTracker.config.customPrices.put(item, price);
+                                                        SkyblockProfitTracker.config.save();
+                                                        msg(ctx.getSource()::sendFeedback,
+                                                                "\u00a7a" + FormatUtil.capitalize(item) + " \u00a77price set to \u00a7e$" +
+                                                                        FormatUtil.formatWithCommas((long) price) + " \u00a77per item");
+                                                    } catch (NumberFormatException e) {
+                                                        msg(ctx.getSource()::sendFeedback, "\u00a7cInvalid price. Use a number.");
+                                                    }
+                                                    return 1;
+                                                }))))
+
+                        .then(literal("clearprice")
+                                .then(argument("item", StringArgumentType.string())
+                                        .suggests((ctx, builder) -> {
+                                            for (String key : SkyblockProfitTracker.config.customPrices.keySet()) {
+                                                builder.suggest(key);
+                                            }
+                                            return builder.buildFuture();
+                                        })
+                                        .executes(ctx -> {
+                                            String item = StringArgumentType.getString(ctx, "item").toLowerCase();
+                                            if (SkyblockProfitTracker.config.customPrices.remove(item) != null) {
+                                                SkyblockProfitTracker.config.save();
+                                                msg(ctx.getSource()::sendFeedback,
+                                                        "\u00a7aCleared custom price for " + FormatUtil.capitalize(item) +
+                                                                ". Using " + SkyblockProfitTracker.config.pricingMode + " pricing.");
+                                            } else {
+                                                msg(ctx.getSource()::sendFeedback,
+                                                        "\u00a77No custom price set for " + FormatUtil.capitalize(item));
+                                            }
+                                            return 1;
+                                        })))
+
+                        .then(literal("listprices").executes(ctx -> {
+                            var customs = SkyblockProfitTracker.config.customPrices;
+                            if (customs.isEmpty()) {
+                                msg(ctx.getSource()::sendFeedback, "\u00a77No custom prices set. Use /pt setprice <item> <price>");
+                                return 1;
+                            }
+                            msg(ctx.getSource()::sendFeedback, "\u00a7f--- Custom Prices ---");
+                            for (var entry : customs.entrySet()) {
+                                msg(ctx.getSource()::sendFeedback,
+                                        "\u00a7e" + FormatUtil.capitalize(entry.getKey()) + "\u00a77: \u00a7a$" +
+                                                FormatUtil.formatWithCommas(entry.getValue().longValue()) + " \u00a77per item");
+                            }
+                            msg(ctx.getSource()::sendFeedback,
+                                    "\u00a78Use /pt clearprice <item> to remove an override.");
+                            return 1;
+                        }))
                 );
             }
         });
@@ -197,14 +256,17 @@ public class TrackerCommand {
     private static void showHelp(java.util.function.Consumer<Text> send) {
         send.accept(Text.literal("\u00a76\u00a7l=== Skyblock Profit Tracker ==="));
         send.accept(Text.literal("\u00a7e/pt reset \u00a77- Reset session"));
-        send.accept(Text.literal("\u00a7e/pt hud \u00a77- Open HUD position editor (drag to move)"));
-        send.accept(Text.literal("\u00a7e/pt hud toggle \u00a77- Toggle HUD on/off"));
+        send.accept(Text.literal("\u00a7e/pt hud \u00a77- Toggle HUD"));
+        send.accept(Text.literal("\u00a7e/pt move <x> <y> \u00a77- Move HUD position"));
         send.accept(Text.literal("\u00a7e/pt scale <0.5-3.0> \u00a77- HUD scale"));
         send.accept(Text.literal("\u00a7e/pt pricing <mode> \u00a77- npc/bazaar_sell/bazaar_buy"));
         send.accept(Text.literal("\u00a7e/pt timeout <seconds> \u00a77- Idle timeout (10-600)"));
         send.accept(Text.literal("\u00a7e/pt breakdown \u00a77- Toggle item breakdown"));
         send.accept(Text.literal("\u00a7e/pt stats \u00a77- Show session stats in chat"));
         send.accept(Text.literal("\u00a7e/pt prices \u00a77- Force refresh Bazaar prices"));
+        send.accept(Text.literal("\u00a7e/pt setprice <item> <price> \u00a77- Set custom item price"));
+        send.accept(Text.literal("\u00a7e/pt clearprice <item> \u00a77- Remove custom price"));
+        send.accept(Text.literal("\u00a7e/pt listprices \u00a77- Show custom price overrides"));
         send.accept(Text.literal("\u00a7e/pt webhook <url> \u00a77- Set Discord webhook"));
         send.accept(Text.literal("\u00a78Tracks ores via Sack messages + gems via PRISTINE! procs."));
     }

@@ -7,6 +7,8 @@ import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.*;
 import java.nio.file.*;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Mod configuration. Saved to config/skyblock-profit-tracker.json.
@@ -40,6 +42,10 @@ public class ModConfig {
 
     // Discord webhook (like BigDiamond)
     public String discordWebhook = "";
+
+    // Manual price overrides: item name (lowercase) -> price per raw item
+    // These take priority over Bazaar and NPC prices
+    public Map<String, Double> customPrices = new LinkedHashMap<>();
 
     // ----- Persistence -----
 

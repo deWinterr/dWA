@@ -30,9 +30,13 @@ public class BazaarPriceFetcher {
 
     /**
      * Get the best price for a gemstone at a given tier.
-     * Returns max(npcPrice, bazaarPrice) like BlingBling does.
+     * Priority: custom price > Bazaar > NPC.
      */
     public double getGemstonePrice(String gemName, int tier) {
+        // Check custom price override (stored as lowercase gem name)
+        Double custom = SkyblockProfitTracker.config.customPrices.get(gemName.toLowerCase());
+        if (custom != null) return custom;
+
         double npc = ItemPrices.gemstoneNpcPrice(tier);
 
         String mode = SkyblockProfitTracker.config.pricingMode;
@@ -49,9 +53,14 @@ public class BazaarPriceFetcher {
     }
 
     /**
-     * Get the Bazaar price for an ore product ID, or fall back to NPC price.
+     * Get the price for an ore item.
+     * Priority: custom price > Bazaar > NPC.
      */
     public double getOrePrice(String itemNameLower) {
+        // Check custom price override
+        Double custom = SkyblockProfitTracker.config.customPrices.get(itemNameLower);
+        if (custom != null) return custom;
+
         double npc = ItemPrices.ORE_NPC_PRICES.getOrDefault(itemNameLower, 0.0);
 
         String mode = SkyblockProfitTracker.config.pricingMode;
