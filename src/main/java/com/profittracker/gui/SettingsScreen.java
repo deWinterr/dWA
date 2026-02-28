@@ -3,9 +3,9 @@ package com.profittracker.gui;
 import com.profittracker.SkyblockProfitTracker;
 import com.profittracker.config.ModConfig;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
 
 import java.util.ArrayList;
@@ -203,8 +203,10 @@ public class SettingsScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button != 0) return super.mouseClicked(mouseX, mouseY, button);
+    public boolean mouseClicked(Click click, boolean doubled) {
+        double mouseX = click.comp_4798();
+        double mouseY = click.comp_4799();
+        if (click.button() != 0) return super.mouseClicked(click, doubled);
 
         // Check if clicking on an open dropdown overlay first
         if (activeDropdown != null && activeDropdown.expanded) {
@@ -227,7 +229,7 @@ public class SettingsScreen extends Screen {
             }
         }
 
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(click, doubled);
     }
 
     @Override
