@@ -1,7 +1,6 @@
 package com.profittracker.tracker;
 
 import com.profittracker.SkyblockProfitTracker;
-import com.profittracker.price.ItemPrices;
 import com.profittracker.util.FormatUtil;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.Text;
@@ -11,7 +10,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Tracks a single mining session's items, profits, and timing.
- * Combines BigDiamond's profitTracker.js session logic with BlingBling's gemstone tracking.
+ *
+ * Uses tick-based timing (20 ticks = 1 second) instead of System.currentTimeMillis()
+ * for reliable elapsed time and idle timeout detection.
  */
 public class ProfitSession {
 
@@ -21,11 +22,12 @@ public class ProfitSession {
     // Gemstone name -> count at flawed tier (pristine procs)
     private final ConcurrentHashMap<String, Long> gemstoneItems = new ConcurrentHashMap<>();
 
-    private long startTime = 0;        // Epoch ms when session started
-    private long lastUpdateTime = 0;   // Epoch ms of last item gain
     private boolean active = false;
-    private boolean paused = false;     // True when timeout reached but not reset
-    private long pausedElapsed = 0;     // Elapsed time when paused (to freeze display)
+    private boolean paused = false;
+
+    // Tick-based timing (20 ticks = 1 second)
+    private long activeTicks = 0;   // Total ticks while actively mining (excludes paused/idle)
+    private int idleTicks = 0;      // Ticks since last item was received
 
     // Cached computed values
     private long totalProfit = 0;
@@ -33,15 +35,18 @@ public class ProfitSession {
     private long elapsedSeconds = 0;
 
     /**
-     * Called every client tick to check for session timeout.
+     * Called every client tick (20 times/sec).
      */
     public void tick() {
         if (!active || paused) return;
 
-        long now = System.currentTimeMillis();
-        int timeoutMs = SkyblockProfitTracker.config.sessionTimeoutSeconds * 1000;
+        activeTicks++;
+        idleTicks++;
 
-        if (lastUpdateTime > 0 && (now - lastUpdateTime) > timeoutMs) {
+        int timeoutTicks = SkyblockProfitTracker.config.sessionTimeoutSeconds * 20;
+        if (idleTicks > timeoutTicks) {
+            // Subtract the idle timeout period from active time
+            activeTicks = Math.max(0, activeTicks - timeoutTicks);
             pause();
         } else {
             recalculate();
@@ -53,12 +58,10 @@ public class ProfitSession {
      * Item name should be lowercase, matching keys in ORE_NPC_PRICES.
      */
     public void addOre(String itemNameLower, long amount) {
-        if (!active) {
-            start();
-        }
-        if (paused) resume(); // Must resume before updating lastUpdateTime so idle time is computed correctly
+        if (!active) start();
+        if (paused) resume();
         oreItems.merge(itemNameLower, amount, Long::sum);
-        lastUpdateTime = System.currentTimeMillis();
+        idleTicks = 0;
         recalculate();
     }
 
@@ -67,55 +70,39 @@ public class ProfitSession {
      * gemName should be capitalized like "Ruby", "Sapphire", etc.
      */
     public void addGemstone(String gemName, long amount) {
-        if (!active) {
-            start();
-        }
-        if (paused) resume(); // Must resume before updating lastUpdateTime so idle time is computed correctly
+        if (!active) start();
+        if (paused) resume();
         gemstoneItems.merge(gemName, amount, Long::sum);
-        lastUpdateTime = System.currentTimeMillis();
+        idleTicks = 0;
         recalculate();
     }
 
     private void start() {
         if (!active) {
-            startTime = System.currentTimeMillis();
-            lastUpdateTime = startTime;
             active = true;
             paused = false;
-            pausedElapsed = 0;
+            activeTicks = 0;
+            idleTicks = 0;
             SkyblockProfitTracker.priceFetcher.fetchPricesAsync();
         }
     }
 
     private void pause() {
         paused = true;
-        pausedElapsed = (System.currentTimeMillis() - startTime) / 1000;
-        // Subtract the timeout period (like BigDiamond does)
-        pausedElapsed = Math.max(0, pausedElapsed - SkyblockProfitTracker.config.sessionTimeoutSeconds);
         recalculate();
         sendChatSummary();
     }
 
     private void resume() {
-        // Extend startTime so idle time doesn't count
-        long idleTime = System.currentTimeMillis() - lastUpdateTime;
-        startTime += idleTime;
         paused = false;
-        pausedElapsed = 0;
+        idleTicks = 0;
     }
 
     /**
      * Recalculate all derived values.
      */
     private void recalculate() {
-        // Calculate elapsed time
-        if (paused) {
-            elapsedSeconds = pausedElapsed;
-        } else if (active && startTime > 0) {
-            elapsedSeconds = (System.currentTimeMillis() - startTime) / 1000;
-        } else {
-            elapsedSeconds = 0;
-        }
+        elapsedSeconds = activeTicks / 20;
 
         // Calculate ore profit
         long oreProfit = 0;
@@ -147,37 +134,36 @@ public class ProfitSession {
     public void reset() {
         oreItems.clear();
         gemstoneItems.clear();
-        startTime = 0;
-        lastUpdateTime = 0;
         active = false;
         paused = false;
-        pausedElapsed = 0;
+        activeTicks = 0;
+        idleTicks = 0;
         totalProfit = 0;
         profitPerHour = 0;
         elapsedSeconds = 0;
     }
 
     /**
-     * Send a summary to chat (like BigDiamond does on timeout).
+     * Send a summary to chat on timeout.
      */
     private void sendChatSummary() {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client == null || client.player == null) return;
 
-        String prefix = "§6[ProfitTracker]§r ";
-        client.player.sendMessage(Text.literal(prefix + "§7No new items in " +
+        String prefix = "\u00a76[ProfitTracker]\u00a7r ";
+        client.player.sendMessage(Text.literal(prefix + "\u00a77No new items in " +
                 SkyblockProfitTracker.config.sessionTimeoutSeconds + "s. Timer paused."), false);
-        client.player.sendMessage(Text.literal(prefix + "§fSession Stats:"), false);
+        client.player.sendMessage(Text.literal(prefix + "\u00a7fSession Stats:"), false);
 
         // Ores
         for (Map.Entry<String, Long> entry : oreItems.entrySet()) {
             if (entry.getValue() > 0) {
                 double price = SkyblockProfitTracker.priceFetcher.getOrePrice(entry.getKey());
                 long itemProfit = (long) (entry.getValue() * price);
-                client.player.sendMessage(Text.literal(prefix + "§f" +
-                        FormatUtil.capitalize(entry.getKey()) + ": §a" +
+                client.player.sendMessage(Text.literal(prefix + "\u00a7f" +
+                        FormatUtil.capitalize(entry.getKey()) + ": \u00a7a" +
                         FormatUtil.formatWithCommas(entry.getValue()) +
-                        " §7($" + FormatUtil.formatWithCommas(itemProfit) + ")"), false);
+                        " \u00a77($" + FormatUtil.formatWithCommas(itemProfit) + ")"), false);
             }
         }
 
@@ -186,20 +172,20 @@ public class ProfitSession {
             if (entry.getValue() > 0) {
                 double price = SkyblockProfitTracker.priceFetcher.getGemstonePrice(entry.getKey(), 1);
                 long itemProfit = (long) (entry.getValue() * price);
-                client.player.sendMessage(Text.literal(prefix + "§d" +
-                        entry.getKey() + " (Flawed): §a" +
+                client.player.sendMessage(Text.literal(prefix + "\u00a7d" +
+                        entry.getKey() + " (Flawed): \u00a7a" +
                         FormatUtil.formatWithCommas(entry.getValue()) +
-                        " §7($" + FormatUtil.formatWithCommas(itemProfit) + ")"), false);
+                        " \u00a77($" + FormatUtil.formatWithCommas(itemProfit) + ")"), false);
             }
         }
 
-        client.player.sendMessage(Text.literal(prefix + "§fTotal Profit: §a$" +
+        client.player.sendMessage(Text.literal(prefix + "\u00a7fTotal Profit: \u00a7a$" +
                 FormatUtil.formatWithCommas(totalProfit)), false);
-        client.player.sendMessage(Text.literal(prefix + "§fTime: §a" +
+        client.player.sendMessage(Text.literal(prefix + "\u00a7fTime: \u00a7a" +
                 FormatUtil.formatTime(elapsedSeconds)), false);
-        client.player.sendMessage(Text.literal(prefix + "§fProfit/hr: §a$" +
+        client.player.sendMessage(Text.literal(prefix + "\u00a7fProfit/hr: \u00a7a$" +
                 FormatUtil.formatWithCommas(profitPerHour)), false);
-        client.player.sendMessage(Text.literal(prefix + "§7Mine more to resume, or /pt reset to start fresh."), false);
+        client.player.sendMessage(Text.literal(prefix + "\u00a77Mine more to resume, or /pt reset to start fresh."), false);
     }
 
     // ----- Getters for HUD -----
@@ -236,7 +222,7 @@ public class ProfitSession {
             if (e.getValue() <= 0) continue;
             double price = SkyblockProfitTracker.priceFetcher.getGemstonePrice(e.getKey(), 1);
             long profit = (long) (e.getValue() * price);
-            entries.add(new ItemBreakdownEntry(e.getKey() + " §d(Flawed)", e.getValue(), profit, true));
+            entries.add(new ItemBreakdownEntry(e.getKey() + " \u00a7d(Flawed)", e.getValue(), profit, true));
         }
 
         entries.sort((a, b) -> Long.compare(b.profit, a.profit));
