@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "skyblock-profit-tracker",
+  "version": "${version}",
+  "name": "Skyblock Profit Tracker",
+  "description": "Tracks ore and gemstone mining profits in Hypixel SkyBlock. Displays HUD overlay with profit/hr, session time, and item breakdown. Supports Bazaar and NPC pricing.",
+  "authors": ["ProfitTracker"],
+  "contact": {},
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.profittracker.SkyblockProfitTracker"]
+  },
+  "mixins": [
+    "skyblock-profit-tracker.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.17.0",
+    "minecraft": "~1.21.10",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
