@@ -145,7 +145,7 @@ public class ChatParser {
             // In 1.21.5+, HoverEvent is an interface.
             // ShowText is a record: HoverEvent.ShowText(Text text)
             if (hover instanceof HoverEvent.ShowText showText) {
-                Text hoverContent = showText.text();
+                Text hoverContent = showText.value();
                 if (hoverContent != null) {
                     return hoverContent.getString();
                 }
