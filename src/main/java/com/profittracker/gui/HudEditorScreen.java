@@ -32,12 +32,19 @@ public class HudEditorScreen extends Screen {
     private int previewW = 120;
     private int previewH = 60;
 
+    // Track mouse position from render() for use in click handlers
+    private int lastMouseX = 0;
+    private int lastMouseY = 0;
+
     public HudEditorScreen() {
         super(Text.literal("HUD Editor"));
     }
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
+
         ModConfig config = SkyblockProfitTracker.config;
         TextRenderer tr = textRenderer;
 
@@ -86,13 +93,9 @@ public class HudEditorScreen extends Screen {
 
         // Border
         int borderColor = (isDragging || hovered) ? BORDER_HOVER : BORDER_NORMAL;
-        // Top border
         ctx.fill(hudX - padding, hudY - padding, hudX + previewW, hudY - padding + 1, borderColor);
-        // Bottom border
         ctx.fill(hudX - padding, hudY + previewH - 1, hudX + previewW, hudY + previewH, borderColor);
-        // Left border
         ctx.fill(hudX - padding, hudY - padding, hudX - padding + 1, hudY + previewH, borderColor);
-        // Right border
         ctx.fill(hudX + previewW - 1, hudY - padding, hudX + previewW, hudY + previewH, borderColor);
 
         // Draw preview text
@@ -125,17 +128,15 @@ public class HudEditorScreen extends Screen {
 
     @Override
     public boolean mouseClicked(Click click, boolean doubled) {
-        double mouseX = click.comp_4798();
-        double mouseY = click.comp_4799();
         if (click.button() == 0) {
             ModConfig config = SkyblockProfitTracker.config;
             int padding = 4;
 
-            if (mouseX >= config.hudX - padding && mouseX <= config.hudX + previewW
-                    && mouseY >= config.hudY - padding && mouseY <= config.hudY + previewH) {
+            if (lastMouseX >= config.hudX - padding && lastMouseX <= config.hudX + previewW
+                    && lastMouseY >= config.hudY - padding && lastMouseY <= config.hudY + previewH) {
                 isDragging = true;
-                dragOffsetX = (float)(mouseX - config.hudX);
-                dragOffsetY = (float)(mouseY - config.hudY);
+                dragOffsetX = (float)(lastMouseX - config.hudX);
+                dragOffsetY = (float)(lastMouseY - config.hudY);
                 return true;
             }
         }

@@ -35,6 +35,10 @@ public class SettingsScreen extends Screen {
     // Active dropdown state
     private DropdownEntry activeDropdown = null;
 
+    // Track mouse position from render() for use in click handlers
+    private int lastMouseX = 0;
+    private int lastMouseY = 0;
+
     public SettingsScreen() {
         super(Text.literal("Profit Tracker Settings"));
     }
@@ -143,6 +147,9 @@ public class SettingsScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
+
         // Dim background
         ctx.fill(0, 0, width, height, 0x88000000);
 
@@ -204,13 +211,11 @@ public class SettingsScreen extends Screen {
 
     @Override
     public boolean mouseClicked(Click click, boolean doubled) {
-        double mouseX = click.comp_4798();
-        double mouseY = click.comp_4799();
         if (click.button() != 0) return super.mouseClicked(click, doubled);
 
         // Check if clicking on an open dropdown overlay first
         if (activeDropdown != null && activeDropdown.expanded) {
-            if (activeDropdown.clickDropdownOverlay(mouseX, mouseY)) {
+            if (activeDropdown.clickDropdownOverlay(lastMouseX, lastMouseY)) {
                 activeDropdown = null;
                 return true;
             }
@@ -224,8 +229,8 @@ public class SettingsScreen extends Screen {
         int contentBottom = panelY + panelH - 8;
 
         for (SettingEntry setting : settings) {
-            if (mouseY >= contentTop && mouseY <= contentBottom) {
-                if (setting.click(mouseX, mouseY)) return true;
+            if (lastMouseY >= contentTop && lastMouseY <= contentBottom) {
+                if (setting.click(lastMouseX, lastMouseY)) return true;
             }
         }
 

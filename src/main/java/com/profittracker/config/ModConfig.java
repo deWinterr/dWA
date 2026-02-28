@@ -33,9 +33,6 @@ public class ModConfig {
     // Bazaar price refresh interval in minutes
     public int priceRefreshMinutes = 5;
 
-    // Discord webhook
-    public String discordWebhook = "";
-
     // Manual price overrides: item name (lowercase) -> price per raw item
     public Map<String, Double> customPrices = new LinkedHashMap<>();
 

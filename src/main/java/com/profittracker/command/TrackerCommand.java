@@ -32,9 +32,8 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.lit
  *   /pt breakdown            - Toggle item breakdown on HUD
  *   /pt stats                - Show current session stats in chat
  *   /pt prices               - Force refresh Bazaar prices
- *   /pt webhook <url>        - Set Discord webhook URL
  *   /pt setprice <item> <p>  - Set custom item price
- *   /pt clearprice <item>    - Remove custom item price
+ *   /pt clearprice <item>    - Remove custom price
  *   /pt listprices           - List custom prices
  */
 public class TrackerCommand {
@@ -217,17 +216,6 @@ public class TrackerCommand {
                             return 1;
                         }))
 
-                        .then(literal("webhook")
-                                .then(argument("url", StringArgumentType.greedyString())
-                                        .executes(ctx -> {
-                                            String url = StringArgumentType.getString(ctx, "url");
-                                            SkyblockProfitTracker.config.discordWebhook = url;
-                                            SkyblockProfitTracker.config.save();
-                                            String display = url.contains("https") ? "\u00a7a" + url : "\u00a7cInvalid URL";
-                                            msg(ctx.getSource()::sendFeedback, "Webhook set to: " + display);
-                                            return 1;
-                                        })))
-
                         .then(literal("setprice")
                                 .then(argument("item", StringArgumentType.string())
                                         .suggests((ctx, builder) -> {
@@ -319,7 +307,6 @@ public class TrackerCommand {
         send.accept(Text.literal("\u00a7e/pt setprice <item> <price> \u00a77- Set custom item price"));
         send.accept(Text.literal("\u00a7e/pt clearprice <item> \u00a77- Remove custom price"));
         send.accept(Text.literal("\u00a7e/pt listprices \u00a77- Show custom price overrides"));
-        send.accept(Text.literal("\u00a7e/pt webhook <url> \u00a77- Set Discord webhook"));
         send.accept(Text.literal("\u00a78Tracks ores via Sack messages + gems via PRISTINE! procs."));
     }
 
