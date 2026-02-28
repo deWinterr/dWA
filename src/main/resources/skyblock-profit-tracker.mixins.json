@@ -3,9 +3,7 @@
   "minVersion": "0.8",
   "package": "com.profittracker.mixin",
   "compatibilityLevel": "JAVA_21",
-  "client": [
-    "ChatHudMixin"
-  ],
+  "client": [],
   "injectors": {
     "defaultRequire": 0
   }
