@@ -56,9 +56,9 @@ public class ProfitSession {
         if (!active) {
             start();
         }
+        if (paused) resume(); // Must resume before updating lastUpdateTime so idle time is computed correctly
         oreItems.merge(itemNameLower, amount, Long::sum);
         lastUpdateTime = System.currentTimeMillis();
-        if (paused) resume();
         recalculate();
     }
 
@@ -70,9 +70,9 @@ public class ProfitSession {
         if (!active) {
             start();
         }
+        if (paused) resume(); // Must resume before updating lastUpdateTime so idle time is computed correctly
         gemstoneItems.merge(gemName, amount, Long::sum);
         lastUpdateTime = System.currentTimeMillis();
-        if (paused) resume();
         recalculate();
     }
 

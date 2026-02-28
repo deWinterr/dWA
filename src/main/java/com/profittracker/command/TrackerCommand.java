@@ -4,9 +4,11 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.profittracker.SkyblockProfitTracker;
 import com.profittracker.config.ModConfig;
+import com.profittracker.hud.HudPositionScreen;
 import com.profittracker.util.FormatUtil;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.ClickEvent;
 import net.minecraft.text.HoverEvent;
 import net.minecraft.text.Style;
@@ -51,14 +53,23 @@ public class TrackerCommand {
                             return 1;
                         }))
 
-                        .then(literal("hud").executes(ctx -> {
-                            ModConfig config = SkyblockProfitTracker.config;
-                            config.hudEnabled = !config.hudEnabled;
-                            config.save();
-                            msg(ctx.getSource()::sendFeedback,
-                                    "HUD " + (config.hudEnabled ? "\u00a7aenabled" : "\u00a7cdisabled") + "\u00a7r.");
-                            return 1;
-                        }))
+                        .then(literal("hud")
+                                .executes(ctx -> {
+                                    // Enable HUD and open the drag-to-position screen
+                                    SkyblockProfitTracker.config.hudEnabled = true;
+                                    SkyblockProfitTracker.config.save();
+                                    MinecraftClient.getInstance().execute(() ->
+                                            MinecraftClient.getInstance().setScreen(new HudPositionScreen()));
+                                    return 1;
+                                })
+                                .then(literal("toggle").executes(ctx -> {
+                                    ModConfig config = SkyblockProfitTracker.config;
+                                    config.hudEnabled = !config.hudEnabled;
+                                    config.save();
+                                    msg(ctx.getSource()::sendFeedback,
+                                            "HUD " + (config.hudEnabled ? "\u00a7aenabled" : "\u00a7cdisabled") + "\u00a7r.");
+                                    return 1;
+                                })))
 
                         .then(literal("move")
                                 .then(argument("x", IntegerArgumentType.integer(0))
@@ -186,8 +197,8 @@ public class TrackerCommand {
     private static void showHelp(java.util.function.Consumer<Text> send) {
         send.accept(Text.literal("\u00a76\u00a7l=== Skyblock Profit Tracker ==="));
         send.accept(Text.literal("\u00a7e/pt reset \u00a77- Reset session"));
-        send.accept(Text.literal("\u00a7e/pt hud \u00a77- Toggle HUD"));
-        send.accept(Text.literal("\u00a7e/pt move <x> <y> \u00a77- Move HUD position"));
+        send.accept(Text.literal("\u00a7e/pt hud \u00a77- Open HUD position editor (drag to move)"));
+        send.accept(Text.literal("\u00a7e/pt hud toggle \u00a77- Toggle HUD on/off"));
         send.accept(Text.literal("\u00a7e/pt scale <0.5-3.0> \u00a77- HUD scale"));
         send.accept(Text.literal("\u00a7e/pt pricing <mode> \u00a77- npc/bazaar_sell/bazaar_buy"));
         send.accept(Text.literal("\u00a7e/pt timeout <seconds> \u00a77- Idle timeout (10-600)"));
