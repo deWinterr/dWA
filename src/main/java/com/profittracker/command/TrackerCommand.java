@@ -4,12 +4,12 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.profittracker.SkyblockProfitTracker;
 import com.profittracker.config.ModConfig;
+import com.profittracker.gui.HudEditorScreen;
+import com.profittracker.gui.SettingsScreen;
 import com.profittracker.util.FormatUtil;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.HoverEvent;
-import net.minecraft.text.Style;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.Text;
 
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
@@ -19,17 +19,23 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.lit
  * Registers all client-side commands.
  *
  * Commands:
- *   /pt or /profittracker    - Show help / toggle HUD
+ *   /pt                      - Show help
+ *   /pt gui                  - Open settings GUI
+ *   /pt edit                 - Open HUD position editor (drag to move)
  *   /pt reset                - Reset session
  *   /pt hud                  - Toggle HUD visibility
  *   /pt move <x> <y>         - Move HUD position
  *   /pt scale <value>        - Set HUD scale (0.5 - 3.0)
  *   /pt pricing <mode>       - Set pricing mode (npc, bazaar_sell, bazaar_buy)
+ *   /pt gemstone <rarity>    - Set gemstone rarity (flawed, fine, flawless)
  *   /pt timeout <seconds>    - Set session timeout
  *   /pt breakdown            - Toggle item breakdown on HUD
  *   /pt stats                - Show current session stats in chat
  *   /pt prices               - Force refresh Bazaar prices
  *   /pt webhook <url>        - Set Discord webhook URL
+ *   /pt setprice <item> <p>  - Set custom item price
+ *   /pt clearprice <item>    - Remove custom item price
+ *   /pt listprices           - List custom prices
  */
 public class TrackerCommand {
 
@@ -37,13 +43,26 @@ public class TrackerCommand {
 
     public static void register() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
-            // Register both /pt and /profittracker
             for (String cmdName : new String[]{"pt", "profittracker"}) {
                 dispatcher.register(ClientCommandManager.literal(cmdName)
                         .executes(ctx -> {
                             showHelp(ctx.getSource()::sendFeedback);
                             return 1;
                         })
+
+                        // Open settings GUI
+                        .then(literal("gui").executes(ctx -> {
+                            MinecraftClient.getInstance().send(() ->
+                                    MinecraftClient.getInstance().setScreen(new SettingsScreen()));
+                            return 1;
+                        }))
+
+                        // Open HUD editor (drag to move)
+                        .then(literal("edit").executes(ctx -> {
+                            MinecraftClient.getInstance().send(() ->
+                                    MinecraftClient.getInstance().setScreen(new HudEditorScreen()));
+                            return 1;
+                        }))
 
                         .then(literal("reset").executes(ctx -> {
                             SkyblockProfitTracker.session.reset();
@@ -119,6 +138,36 @@ public class TrackerCommand {
                                             };
                                             msg(ctx.getSource()::sendFeedback,
                                                     "Pricing mode set to \u00a7e" + modeDisplay);
+                                            return 1;
+                                        })))
+
+                        // Gemstone rarity selection
+                        .then(literal("gemstone")
+                                .then(argument("rarity", StringArgumentType.word())
+                                        .suggests((ctx, builder) -> {
+                                            builder.suggest("flawed");
+                                            builder.suggest("fine");
+                                            builder.suggest("flawless");
+                                            return builder.buildFuture();
+                                        })
+                                        .executes(ctx -> {
+                                            String rarity = StringArgumentType.getString(ctx, "rarity").toLowerCase();
+                                            int tier = switch (rarity) {
+                                                case "fine" -> 2;
+                                                case "flawless" -> 3;
+                                                case "flawed" -> 1;
+                                                default -> -1;
+                                            };
+                                            if (tier == -1) {
+                                                msg(ctx.getSource()::sendFeedback,
+                                                        "\u00a7cInvalid rarity. Use: flawed, fine, or flawless");
+                                                return 0;
+                                            }
+                                            SkyblockProfitTracker.config.gemstoneRarity = tier;
+                                            SkyblockProfitTracker.config.save();
+                                            msg(ctx.getSource()::sendFeedback,
+                                                    "Gemstone rarity set to \u00a7d" + FormatUtil.capitalize(rarity) +
+                                                            " \u00a77(tier " + tier + ")");
                                             return 1;
                                         })))
 
@@ -255,11 +304,14 @@ public class TrackerCommand {
 
     private static void showHelp(java.util.function.Consumer<Text> send) {
         send.accept(Text.literal("\u00a76\u00a7l=== Skyblock Profit Tracker ==="));
+        send.accept(Text.literal("\u00a7e/pt gui \u00a77- Open settings GUI"));
+        send.accept(Text.literal("\u00a7e/pt edit \u00a77- Drag HUD to reposition"));
         send.accept(Text.literal("\u00a7e/pt reset \u00a77- Reset session"));
         send.accept(Text.literal("\u00a7e/pt hud \u00a77- Toggle HUD"));
         send.accept(Text.literal("\u00a7e/pt move <x> <y> \u00a77- Move HUD position"));
         send.accept(Text.literal("\u00a7e/pt scale <0.5-3.0> \u00a77- HUD scale"));
         send.accept(Text.literal("\u00a7e/pt pricing <mode> \u00a77- npc/bazaar_sell/bazaar_buy"));
+        send.accept(Text.literal("\u00a7e/pt gemstone <rarity> \u00a77- flawed/fine/flawless"));
         send.accept(Text.literal("\u00a7e/pt timeout <seconds> \u00a77- Idle timeout (10-600)"));
         send.accept(Text.literal("\u00a7e/pt breakdown \u00a77- Toggle item breakdown"));
         send.accept(Text.literal("\u00a7e/pt stats \u00a77- Show session stats in chat"));

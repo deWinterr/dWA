@@ -15,17 +15,13 @@ import java.util.List;
 
 /**
  * Renders the mining profit HUD overlay on screen.
- * Combines BigDiamond's profitDisplay (profit, $/hr, items, time)
- * with BlingBling's coin tracker (uptime, $/hr display).
- *
- * 1.21.10 compatible: no MatrixStack push/pop/scale (removed in 1.21.9+).
- * Instead we pre-compute scaled coordinates and draw directly.
+ * Now supports configurable text colors, display toggles,
+ * and gemstone rarity display.
  */
 public class ProfitHudOverlay {
 
     private static final int LINE_HEIGHT = 11;
-    private static final int PADDING = 4;
-    private static final int BG_COLOR = 0x80000000;
+    private static final int PADDING = 6;
 
     public void register() {
         HudRenderCallback.EVENT.register(this::render);
@@ -40,13 +36,10 @@ public class ProfitHudOverlay {
 
         MinecraftClient client = MinecraftClient.getInstance();
         if (client == null || client.player == null) return;
-
-        // Skip during F3 debug screen
         if (client.getDebugHud().shouldShowDebugHud()) return;
 
         TextRenderer textRenderer = client.textRenderer;
 
-        // Build all HUD lines
         List<String> lines = buildLines(session, config);
         if (lines.isEmpty()) return;
 
@@ -62,10 +55,15 @@ public class ProfitHudOverlay {
 
         int totalHeight = lines.size() * LINE_HEIGHT;
 
-        // Draw background
+        // Draw background with configured color
         context.fill(x - PADDING, y - PADDING,
                 x + maxWidth + PADDING, y + totalHeight + PADDING,
-                BG_COLOR);
+                config.bgColor);
+
+        // Accent line at top (salmon pink)
+        context.fill(x - PADDING, y - PADDING,
+                x + maxWidth + PADDING, y - PADDING + 2,
+                0xFFFA8072);
 
         // Draw text lines
         int lineY = y;
@@ -78,36 +76,67 @@ public class ProfitHudOverlay {
     private List<String> buildLines(ProfitSession session, ModConfig config) {
         List<String> lines = new ArrayList<>();
 
-        String pauseTag = session.isPaused() ? " \u00a7c(PAUSED)" : "";
-        lines.add("\u00a76\u00a7l\u26cf Profit Tracker" + pauseTag);
-        lines.add("\u00a78\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
-        lines.add("\u00a77Profit: \u00a7a$" + FormatUtil.formatWithCommas(session.getTotalProfit()));
-        lines.add("\u00a77$/hr: \u00a7a$" + FormatUtil.formatWithCommas(session.getProfitPerHour()));
-        lines.add("\u00a77Time: \u00a7f" + FormatUtil.formatTime(session.getElapsedSeconds()));
+        // Color code shortcuts
+        String tc = "\u00a7" + config.titleColor;    // title
+        String lc = "\u00a7" + config.labelColor;    // label
+        String vc = "\u00a7" + config.valueColor;    // value
+        String tmC = "\u00a7" + config.timeColor;    // time
+        String sc = "\u00a7" + config.separatorColor; // separator
 
-        long totalItems = session.getTotalOreItems() + session.getTotalGemstones();
-        lines.add("\u00a77Items: \u00a7f" + FormatUtil.formatWithCommas(totalItems));
+        // Title
+        String pauseTag = session.isPaused() ? " \u00a7c(PAUSED)" : "";
+        lines.add(tc + "\u00a7l\u26cf Profit Tracker" + pauseTag);
+
+        if (config.showSeparators) {
+            lines.add(sc + "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
+        }
+
+        if (config.showProfit) {
+            lines.add(lc + "Profit: " + vc + "$" + FormatUtil.formatWithCommas(session.getTotalProfit()));
+        }
+
+        if (config.showProfitPerHour) {
+            lines.add(lc + "$/hr: " + vc + "$" + FormatUtil.formatWithCommas(session.getProfitPerHour()));
+        }
+
+        if (config.showTime) {
+            lines.add(lc + "Time: " + tmC + FormatUtil.formatTime(session.getElapsedSeconds()));
+        }
+
+        if (config.showItems) {
+            long totalItems = session.getTotalOreItems() + session.getTotalGemstones();
+            lines.add(lc + "Items: " + tmC + FormatUtil.formatWithCommas(totalItems));
+        }
 
         if (config.showItemBreakdown) {
             List<ProfitSession.ItemBreakdownEntry> topItems = session.getTopItems(config.maxBreakdownItems);
             if (!topItems.isEmpty()) {
-                lines.add("\u00a78\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
+                if (config.showSeparators) {
+                    lines.add(sc + "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
+                }
                 for (ProfitSession.ItemBreakdownEntry entry : topItems) {
                     String color = entry.isGemstone() ? "\u00a7d" : "\u00a7f";
-                    lines.add(color + entry.name() + "\u00a77: \u00a7a$" +
+                    lines.add(color + entry.name() + "\u00a77: " + vc + "$" +
                             FormatUtil.formatNumber(entry.profit()) +
                             " \u00a78(x" + FormatUtil.formatWithCommas(entry.count()) + ")");
                 }
             }
         }
 
-        String mode = switch (config.pricingMode) {
-            case "bazaar_sell" -> "\u00a78[BZ Instant Sell]";
-            case "bazaar_buy" -> "\u00a78[BZ Sell Offer]";
-            case "npc" -> "\u00a78[NPC Prices]";
-            default -> "";
-        };
-        lines.add(mode);
+        if (config.showPricingMode) {
+            String tierName = switch (config.gemstoneRarity) {
+                case 2 -> " Fine";
+                case 3 -> " Flawless";
+                default -> " Flawed";
+            };
+            String mode = switch (config.pricingMode) {
+                case "bazaar_sell" -> sc + "[BZ Sell |" + tierName + "]";
+                case "bazaar_buy" -> sc + "[BZ Offer |" + tierName + "]";
+                case "npc" -> sc + "[NPC |" + tierName + "]";
+                default -> "";
+            };
+            lines.add(mode);
+        }
 
         return lines;
     }
