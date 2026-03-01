@@ -1,0 +1,318 @@
+package com.profittracker.command;
+
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.profittracker.SkyblockProfitTracker;
+import com.profittracker.config.ModConfig;
+import com.profittracker.gui.HudEditorScreen;
+import com.profittracker.gui.SettingsScreen;
+import com.profittracker.util.FormatUtil;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.text.Text;
+import net.minecraft.text.TextColor;
+
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
+
+/**
+ * Registers all client-side commands.
+ *
+ * Commands:
+ *   /pt                      - Show help
+ *   /pt gui                  - Open settings GUI
+ *   /pt edit                 - Open HUD position editor (drag to move)
+ *   /pt reset                - Reset session
+ *   /pt hud                  - Toggle HUD visibility
+ *   /pt move <x> <y>         - Move HUD position
+ *   /pt scale <value>        - Set HUD scale (0.5 - 3.0)
+ *   /pt pricing <mode>       - Set pricing mode (npc, bazaar_sell, bazaar_buy)
+ *   /pt gemstone <rarity>    - Set gemstone rarity (flawed, fine, flawless)
+ *   /pt timeout <seconds>    - Set session timeout
+ *   /pt breakdown            - Toggle item breakdown on HUD
+ *   /pt stats                - Show current session stats in chat
+ *   /pt prices               - Force refresh Bazaar prices
+ *   /pt setprice <item> <p>  - Set custom item price
+ *   /pt clearprice <item>    - Remove custom price
+ *   /pt listprices           - List custom prices
+ */
+public class TrackerCommand {
+
+    public static void register() {
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+            for (String cmdName : new String[]{"pt", "profittracker"}) {
+                dispatcher.register(ClientCommandManager.literal(cmdName)
+                        .executes(ctx -> {
+                            showHelp(ctx.getSource()::sendFeedback);
+                            return 1;
+                        })
+
+                        // Open settings GUI
+                        .then(literal("gui").executes(ctx -> {
+                            MinecraftClient.getInstance().send(() ->
+                                    MinecraftClient.getInstance().setScreen(new SettingsScreen()));
+                            return 1;
+                        }))
+
+                        // Open HUD editor (drag to move)
+                        .then(literal("edit").executes(ctx -> {
+                            MinecraftClient.getInstance().send(() ->
+                                    MinecraftClient.getInstance().setScreen(new HudEditorScreen()));
+                            return 1;
+                        }))
+
+                        .then(literal("reset").executes(ctx -> {
+                            SkyblockProfitTracker.session.reset();
+                            msg(ctx.getSource()::sendFeedback, "\u00a7aSession reset! Start mining to begin a new session.");
+                            return 1;
+                        }))
+
+                        .then(literal("hud").executes(ctx -> {
+                            ModConfig config = SkyblockProfitTracker.config;
+                            config.hudEnabled = !config.hudEnabled;
+                            config.save();
+                            msg(ctx.getSource()::sendFeedback,
+                                    "HUD " + (config.hudEnabled ? "\u00a7aenabled" : "\u00a7cdisabled") + "\u00a7r.");
+                            return 1;
+                        }))
+
+                        .then(literal("move")
+                                .then(argument("x", IntegerArgumentType.integer(0))
+                                        .then(argument("y", IntegerArgumentType.integer(0))
+                                                .executes(ctx -> {
+                                                    int x = IntegerArgumentType.getInteger(ctx, "x");
+                                                    int y = IntegerArgumentType.getInteger(ctx, "y");
+                                                    SkyblockProfitTracker.config.hudX = x;
+                                                    SkyblockProfitTracker.config.hudY = y;
+                                                    SkyblockProfitTracker.config.save();
+                                                    msg(ctx.getSource()::sendFeedback,
+                                                            "HUD moved to \u00a7e" + x + ", " + y);
+                                                    return 1;
+                                                }))))
+
+                        .then(literal("scale")
+                                .then(argument("value", StringArgumentType.word())
+                                        .executes(ctx -> {
+                                            try {
+                                                float scale = Float.parseFloat(StringArgumentType.getString(ctx, "value"));
+                                                scale = Math.max(0.5f, Math.min(3.0f, scale));
+                                                SkyblockProfitTracker.config.hudScale = scale;
+                                                SkyblockProfitTracker.config.save();
+                                                msg(ctx.getSource()::sendFeedback,
+                                                        "HUD scale set to \u00a7e" + scale);
+                                            } catch (NumberFormatException e) {
+                                                msg(ctx.getSource()::sendFeedback,
+                                                        "\u00a7cInvalid scale. Use a number between 0.5 and 3.0");
+                                            }
+                                            return 1;
+                                        })))
+
+                        .then(literal("pricing")
+                                .then(argument("mode", StringArgumentType.word())
+                                        .suggests((ctx, builder) -> {
+                                            builder.suggest("npc");
+                                            builder.suggest("bazaar_sell");
+                                            builder.suggest("bazaar_buy");
+                                            return builder.buildFuture();
+                                        })
+                                        .executes(ctx -> {
+                                            String mode = StringArgumentType.getString(ctx, "mode");
+                                            if (!mode.equals("npc") && !mode.equals("bazaar_sell") && !mode.equals("bazaar_buy")) {
+                                                msg(ctx.getSource()::sendFeedback,
+                                                        "\u00a7cInvalid mode. Use: npc, bazaar_sell, or bazaar_buy");
+                                                return 0;
+                                            }
+                                            SkyblockProfitTracker.config.pricingMode = mode;
+                                            SkyblockProfitTracker.config.save();
+                                            if (!mode.equals("npc")) {
+                                                SkyblockProfitTracker.priceFetcher.fetchPricesAsync();
+                                            }
+                                            String modeDisplay = switch (mode) {
+                                                case "npc" -> "NPC Prices";
+                                                case "bazaar_sell" -> "Bazaar Instant Sell";
+                                                case "bazaar_buy" -> "Bazaar Sell Offer";
+                                                default -> mode;
+                                            };
+                                            msg(ctx.getSource()::sendFeedback,
+                                                    "Pricing mode set to \u00a7e" + modeDisplay);
+                                            return 1;
+                                        })))
+
+                        // Gemstone rarity selection
+                        .then(literal("gemstone")
+                                .then(argument("rarity", StringArgumentType.word())
+                                        .suggests((ctx, builder) -> {
+                                            builder.suggest("flawed");
+                                            builder.suggest("fine");
+                                            builder.suggest("flawless");
+                                            return builder.buildFuture();
+                                        })
+                                        .executes(ctx -> {
+                                            String rarity = StringArgumentType.getString(ctx, "rarity").toLowerCase();
+                                            int tier = switch (rarity) {
+                                                case "fine" -> 2;
+                                                case "flawless" -> 3;
+                                                case "flawed" -> 1;
+                                                default -> -1;
+                                            };
+                                            if (tier == -1) {
+                                                msg(ctx.getSource()::sendFeedback,
+                                                        "\u00a7cInvalid rarity. Use: flawed, fine, or flawless");
+                                                return 0;
+                                            }
+                                            SkyblockProfitTracker.config.gemstoneRarity = tier;
+                                            SkyblockProfitTracker.config.save();
+                                            msg(ctx.getSource()::sendFeedback,
+                                                    "Gemstone rarity set to \u00a7d" + FormatUtil.capitalize(rarity) +
+                                                            " \u00a77(tier " + tier + ")");
+                                            return 1;
+                                        })))
+
+                        .then(literal("timeout")
+                                .then(argument("seconds", IntegerArgumentType.integer(10, 600))
+                                        .executes(ctx -> {
+                                            int secs = IntegerArgumentType.getInteger(ctx, "seconds");
+                                            SkyblockProfitTracker.config.sessionTimeoutSeconds = secs;
+                                            SkyblockProfitTracker.config.save();
+                                            msg(ctx.getSource()::sendFeedback,
+                                                    "Session timeout set to \u00a7e" + secs + "s \u00a77(ores always use 60s minimum)");
+                                            return 1;
+                                        })))
+
+                        .then(literal("breakdown").executes(ctx -> {
+                            ModConfig config = SkyblockProfitTracker.config;
+                            config.showItemBreakdown = !config.showItemBreakdown;
+                            config.save();
+                            msg(ctx.getSource()::sendFeedback,
+                                    "Item breakdown " + (config.showItemBreakdown ? "\u00a7aenabled" : "\u00a7cdisabled"));
+                            return 1;
+                        }))
+
+                        .then(literal("stats").executes(ctx -> {
+                            var session = SkyblockProfitTracker.session;
+                            if (!session.isActive()) {
+                                msg(ctx.getSource()::sendFeedback, "\u00a77No active session. Start mining!");
+                                return 1;
+                            }
+                            msg(ctx.getSource()::sendFeedback, "\u00a7f--- Session Stats ---");
+                            msg(ctx.getSource()::sendFeedback,
+                                    "\u00a77Profit: \u00a7a$" + FormatUtil.formatWithCommas(session.getTotalProfit()));
+                            msg(ctx.getSource()::sendFeedback,
+                                    "\u00a77$/hr: \u00a7a$" + FormatUtil.formatWithCommas(session.getProfitPerHour()));
+                            msg(ctx.getSource()::sendFeedback,
+                                    "\u00a77Time: \u00a7f" + FormatUtil.formatTime(session.getElapsedSeconds()));
+                            msg(ctx.getSource()::sendFeedback,
+                                    "\u00a77Ores: \u00a7f" + FormatUtil.formatWithCommas(session.getTotalOreItems()));
+                            msg(ctx.getSource()::sendFeedback,
+                                    "\u00a77Gems: \u00a7d" + FormatUtil.formatWithCommas(session.getTotalGemstones()));
+                            return 1;
+                        }))
+
+                        .then(literal("prices").executes(ctx -> {
+                            SkyblockProfitTracker.priceFetcher.fetchPricesAsync();
+                            msg(ctx.getSource()::sendFeedback, "\u00a7eRefreshing Bazaar prices...");
+                            return 1;
+                        }))
+
+                        .then(literal("setprice")
+                                .then(argument("item", StringArgumentType.string())
+                                        .suggests((ctx, builder) -> {
+                                            for (String ore : com.profittracker.price.ItemPrices.ORE_NPC_PRICES.keySet()) {
+                                                builder.suggest(ore);
+                                            }
+                                            for (String gem : com.profittracker.price.ItemPrices.GEMSTONE_TYPES) {
+                                                builder.suggest(gem.toLowerCase());
+                                            }
+                                            return builder.buildFuture();
+                                        })
+                                        .then(argument("price", StringArgumentType.word())
+                                                .executes(ctx -> {
+                                                    String item = StringArgumentType.getString(ctx, "item").toLowerCase();
+                                                    try {
+                                                        double price = Double.parseDouble(StringArgumentType.getString(ctx, "price"));
+                                                        if (price < 0) {
+                                                            msg(ctx.getSource()::sendFeedback, "\u00a7cPrice must be >= 0");
+                                                            return 0;
+                                                        }
+                                                        SkyblockProfitTracker.config.customPrices.put(item, price);
+                                                        SkyblockProfitTracker.config.save();
+                                                        msg(ctx.getSource()::sendFeedback,
+                                                                "\u00a7a" + FormatUtil.capitalize(item) + " \u00a77price set to \u00a7e$" +
+                                                                        FormatUtil.formatWithCommas((long) price) + " \u00a77per item");
+                                                    } catch (NumberFormatException e) {
+                                                        msg(ctx.getSource()::sendFeedback, "\u00a7cInvalid price. Use a number.");
+                                                    }
+                                                    return 1;
+                                                }))))
+
+                        .then(literal("clearprice")
+                                .then(argument("item", StringArgumentType.string())
+                                        .suggests((ctx, builder) -> {
+                                            for (String key : SkyblockProfitTracker.config.customPrices.keySet()) {
+                                                builder.suggest(key);
+                                            }
+                                            return builder.buildFuture();
+                                        })
+                                        .executes(ctx -> {
+                                            String item = StringArgumentType.getString(ctx, "item").toLowerCase();
+                                            if (SkyblockProfitTracker.config.customPrices.remove(item) != null) {
+                                                SkyblockProfitTracker.config.save();
+                                                msg(ctx.getSource()::sendFeedback,
+                                                        "\u00a7aCleared custom price for " + FormatUtil.capitalize(item) +
+                                                                ". Using " + SkyblockProfitTracker.config.pricingMode + " pricing.");
+                                            } else {
+                                                msg(ctx.getSource()::sendFeedback,
+                                                        "\u00a77No custom price set for " + FormatUtil.capitalize(item));
+                                            }
+                                            return 1;
+                                        })))
+
+                        .then(literal("listprices").executes(ctx -> {
+                            var customs = SkyblockProfitTracker.config.customPrices;
+                            if (customs.isEmpty()) {
+                                msg(ctx.getSource()::sendFeedback, "\u00a77No custom prices set. Use /pt setprice <item> <price>");
+                                return 1;
+                            }
+                            msg(ctx.getSource()::sendFeedback, "\u00a7f--- Custom Prices ---");
+                            for (var entry : customs.entrySet()) {
+                                msg(ctx.getSource()::sendFeedback,
+                                        "\u00a7e" + FormatUtil.capitalize(entry.getKey()) + "\u00a77: \u00a7a$" +
+                                                FormatUtil.formatWithCommas(entry.getValue().longValue()) + " \u00a77per item");
+                            }
+                            msg(ctx.getSource()::sendFeedback,
+                                    "\u00a78Use /pt clearprice <item> to remove an override.");
+                            return 1;
+                        }))
+                );
+            }
+        });
+    }
+
+    private static void showHelp(java.util.function.Consumer<Text> send) {
+        send.accept(Text.literal("\u00a76\u00a7l=== Skyblock Profit Tracker ==="));
+        send.accept(Text.literal("\u00a7e/pt gui \u00a77- Open settings GUI"));
+        send.accept(Text.literal("\u00a7e/pt edit \u00a77- Drag HUD to reposition"));
+        send.accept(Text.literal("\u00a7e/pt reset \u00a77- Reset session"));
+        send.accept(Text.literal("\u00a7e/pt hud \u00a77- Toggle HUD"));
+        send.accept(Text.literal("\u00a7e/pt move <x> <y> \u00a77- Move HUD position"));
+        send.accept(Text.literal("\u00a7e/pt scale <0.5-3.0> \u00a77- HUD scale"));
+        send.accept(Text.literal("\u00a7e/pt pricing <mode> \u00a77- npc/bazaar_sell/bazaar_buy"));
+        send.accept(Text.literal("\u00a7e/pt gemstone <rarity> \u00a77- flawed/fine/flawless"));
+        send.accept(Text.literal("\u00a7e/pt timeout <seconds> \u00a77- Idle timeout (10-600, ores=60s fixed)"));
+        send.accept(Text.literal("\u00a7e/pt breakdown \u00a77- Toggle item breakdown"));
+        send.accept(Text.literal("\u00a7e/pt stats \u00a77- Show session stats in chat"));
+        send.accept(Text.literal("\u00a7e/pt prices \u00a77- Force refresh Bazaar prices"));
+        send.accept(Text.literal("\u00a7e/pt setprice <item> <price> \u00a77- Set custom item price"));
+        send.accept(Text.literal("\u00a7e/pt clearprice <item> \u00a77- Remove custom price"));
+        send.accept(Text.literal("\u00a7e/pt listprices \u00a77- Show custom price overrides"));
+        send.accept(Text.literal("\u00a78Tracks ores via Sack messages + gems via PRISTINE! procs."));
+    }
+
+    /** Send a message with configurable RGB [ProfitTracker] prefix. */
+    private static void msg(java.util.function.Consumer<Text> send, String text) {
+        int rgb = SkyblockProfitTracker.config.chatPrefixColor;
+        Text prefix = Text.literal("[ProfitTracker]").styled(s -> s.withColor(TextColor.fromRgb(rgb)));
+        send.accept(Text.empty().append(prefix).append(Text.literal(" " + text)));
+    }
+}
