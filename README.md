@@ -1,107 +1,95 @@
 # Skyblock Profit Tracker — Fabric 1.21.10
 
-A client-side Fabric mod for Minecraft 1.21.10 that tracks ore and gemstone mining profits in Hypixel SkyBlock. A port/combination of the ChatTriggers 1.8.9 modules **BigDiamond** and **BlingBlingAddons** into a modern Fabric mod.
+A client-side Fabric mod that tracks ore and gemstone mining profits in Hypixel SkyBlock.
 
-## Features
+## Credits
 
-### Ore Tracking (from BigDiamond)
-- Detects `[Sacks] +X items. (Last Ys.)` chat messages
-- Parses hover text to identify individual ore types
-- Handles enchanted item multipliers (×160) and block multipliers (×160²)
-- Tracks: Diamond, Coal, Iron, Gold, Emerald, Lapis, Redstone, Obsidian, Mithril, Titanium, End Stone, Glacite, Umber, Tungsten
+Based on the following ChatTriggers modules, ported to a modern Fabric mod:
 
-### Gemstone Tracking (from BlingBlingAddons)
-- Detects `PRISTINE! You found a Flawed X Gemstone x#!` messages
-- Tracks all gemstone types: Ruby, Amethyst, Jade, Sapphire, Amber, Topaz, Jasper, Aquamarine, Citrine, Peridot, Onyx
-- Counts flawed gemstone procs with accurate per-gem pricing
-
-### Pricing
-- **Bazaar Instant Sell** — Real-time prices from Hypixel Bazaar API (default)
-- **Bazaar Sell Offer** — Buy order prices for higher estimates
-- **NPC Prices** — Static NPC sell values as fallback
-- Automatically picks `max(NPC, Bazaar)` per item (like BlingBlingAddons)
-- Auto-refreshes prices every 5 minutes
-
-### HUD Overlay
-- Displays: Total Profit, $/hr, Session Time, Total Items
-- Optional item breakdown showing top earners
-- Configurable position, scale, and visibility
-- Semi-transparent background
-- Auto-pauses when idle (configurable timeout)
-
-### Session Management
-- Auto-starts when mining items are detected
-- Auto-pauses after configurable idle timeout (default 60s)
-- Subtracts idle time from session (like BigDiamond)
-- Prints session summary to chat on pause
-- Resumes automatically when new items detected
+- **[bigdiamond](https://github.com/eatpIastic/bigdiamond)** — Ore tracking (sack message parsing, enchanted item multipliers, session management, idle timeout)
+- **[BlingBlingAddons](https://github.com/blingblingdeveloper/BlingBlingAddons)** — Gemstone tracking (PRISTINE! detection, Bazaar price fetching, max(NPC, Bazaar) pricing)
+- **[NoammAddons](https://github.com/Noamm9/NoammAddons-1.21.10)** — GUI and HUD (settings screen, HUD overlay, HSB color picker, draggable HUD editor)
 
 ## Commands
 
+All commands use `/pt` (or `/profittracker`).
+
+### General
+
 | Command | Description |
 |---|---|
-| `/pt` | Show help |
-| `/pt reset` | Reset current session |
-| `/pt hud` | Toggle HUD on/off |
-| `/pt move <x> <y>` | Set HUD position |
-| `/pt scale <0.5-3.0>` | Set HUD scale |
-| `/pt pricing <mode>` | `npc`, `bazaar_sell`, or `bazaar_buy` |
-| `/pt timeout <seconds>` | Idle timeout (10-600s) |
-| `/pt breakdown` | Toggle item breakdown display |
-| `/pt stats` | Print session stats to chat |
-| `/pt prices` | Force refresh Bazaar prices |
-| `/pt webhook <url>` | Set Discord webhook URL |
+| `/pt` | Print all available commands to chat. |
+| `/pt gui` | Open the settings GUI. Configure pricing mode, gemstone rarity, HUD colors, toggle individual HUD elements, set breakdown item count, and idle timeout — all from one screen. |
+| `/pt edit` | Open the HUD editor. Drag the HUD overlay to reposition it on screen. |
+| `/pt reset` | Clear all session data (profit, items, time) and start fresh. |
+| `/pt stats` | Print current session stats to chat: total profit, $/hr, session time, ore count, and gem count. |
+
+### HUD
+
+| Command | Description |
+|---|---|
+| `/pt hud` | Toggle the HUD overlay on or off. |
+| `/pt move <x> <y>` | Set the HUD position to exact pixel coordinates. Both values must be >= 0. |
+| `/pt scale <0.5-3.0>` | Set the HUD scale. Values outside the range are clamped. |
+| `/pt breakdown` | Toggle the item breakdown section on the HUD, which shows your top-earning items and their individual profit. |
+
+### Pricing
+
+| Command | Description |
+|---|---|
+| `/pt pricing <mode>` | Set the pricing mode. Options: `npc` (static NPC sell prices), `bazaar_sell` (Bazaar Instant Sell — real-time, default), `bazaar_buy` (Bazaar Sell Offer — buy order prices, higher estimates). Switching to a Bazaar mode triggers an immediate price refresh. |
+| `/pt prices` | Force refresh all Bazaar prices immediately. Prices auto-refresh every 5 minutes. |
+| `/pt setprice <item> <price>` | Override the price of a specific item. Accepts ore names (`diamond`, `coal`, `mithril`, etc.) and gemstone names (`ruby`, `jade`, etc.). The custom price overrides all pricing modes for that item. Price must be >= 0. |
+| `/pt clearprice <item>` | Remove a custom price override for an item, reverting it to the active pricing mode. |
+| `/pt listprices` | List all custom price overrides currently set. |
+
+### Gemstones
+
+| Command | Description |
+|---|---|
+| `/pt gemstone <rarity>` | Set which gemstone rarity to price. Options: `flawed` (tier 1), `fine` (tier 2), `flawless` (tier 3). This determines which Bazaar product ID is used when fetching gemstone prices. |
+
+### Session
+
+| Command | Description |
+|---|---|
+| `/pt timeout <10-600>` | Set the idle timeout in seconds. When no mining activity is detected for this duration, the session auto-pauses and idle time is subtracted from the session. Ore tracking always uses a minimum of 60s regardless of this setting. |
+
+## Tracked Items
+
+### Ores
+Diamond, Coal, Iron, Gold, Emerald, Lapis, Redstone, Obsidian, Mithril, Titanium, End Stone, Glacite, Umber, Tungsten.
+
+Detected from `[Sacks] +X items. (Last Ys.)` chat messages. Hover text is parsed for individual item types. Enchanted items are multiplied by 160, enchanted blocks by 160x160.
+
+### Gemstones
+Ruby, Amethyst, Jade, Sapphire, Amber, Topaz, Jasper, Aquamarine, Citrine, Peridot, Onyx.
+
+Detected from `PRISTINE! You found a Flawed X Gemstone x#!` chat messages.
 
 ## Building
 
-### Prerequisites
-- Java 21+
-- Internet connection (for Gradle to download dependencies)
+Requires Java 21+.
 
-### Steps
 ```bash
-# Clone or extract the project
-cd SkyblockProfitTracker
-
-# Build the mod (Linux/macOS)
 ./gradlew build
-
-# Build the mod (Windows)
-gradlew.bat build
 ```
 
-The built `.jar` will be at `build/libs/SkyblockProfitTracker-1.0.0.jar`.
+Output: `build/libs/SkyblockProfitTracker-1.0.2.jar`
 
-### Installing
+## Installing
+
 1. Install [Fabric Loader](https://fabricmc.net/use/installer/) for Minecraft 1.21.10
-2. Install [Fabric API](https://modrinth.com/mod/fabric-api) (`0.138.3+1.21.10` or later)
-3. Place `SkyblockProfitTracker-1.0.0.jar` in your `.minecraft/mods/` folder
-4. Launch Minecraft 1.21.10 with Fabric
+2. Install [Fabric API](https://modrinth.com/mod/fabric-api) (0.138.3+1.21.10 or later)
+3. Drop the `.jar` into `.minecraft/mods/`
 
 ## Config
 
-Configuration is saved to `.minecraft/config/skyblock-profit-tracker.json` and can be edited manually or via commands.
-
-## Feature Mapping from Original Modules
-
-| Original Feature | Source | Port Status |
-|---|---|---|
-| Sack message parsing + hover text | BigDiamond `trackers.js` | ✅ `ChatParser.java` |
-| NPC ore prices | BigDiamond `utils.js` | ✅ `ItemPrices.java` |
-| Profit/hr calculation | BigDiamond `profitTracker.js` | ✅ `ProfitSession.java` |
-| Session timeout + auto-reset | BigDiamond `profitTracker.js` | ✅ `ProfitSession.java` |
-| HUD overlay display | BigDiamond `gui.js` | ✅ `ProfitHudOverlay.java` |
-| Draggable HUD position | BigDiamond `gui.js` | ✅ Via `/pt move` command |
-| Discord webhook | BigDiamond `Discord/manager.js` | ✅ Config stored, sending TODO |
-| PRISTINE! gemstone tracking | BlingBling `miningtracker.js` | ✅ `ChatParser.java` |
-| Bazaar price fetching | BlingBling `mininginfo.js` | ✅ `BazaarPriceFetcher.java` |
-| max(NPC, Bazaar) pricing | BlingBling `mininginfo.js` | ✅ `BazaarPriceFetcher.java` |
-| Area detection (scoreboard) | BlingBling `helperFunctions.js` | ✅ `AreaDetector.java` |
-| Enchanted item multipliers | BigDiamond `trackers.js` | ✅ `ChatParser.java` |
-| Sell offer vs instant sell | BlingBling `mininginfo.js` | ✅ `/pt pricing` command |
+Saved to `.minecraft/config/skyblock-profit-tracker.json`. Editable via `/pt gui` or manually.
 
 ## Requirements
+
 - Minecraft 1.21.10
-- Fabric Loader ≥ 0.17.0
+- Fabric Loader >= 0.17.0
 - Fabric API
 - Java 21+
