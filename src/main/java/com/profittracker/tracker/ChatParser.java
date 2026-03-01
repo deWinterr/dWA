@@ -124,7 +124,7 @@ public class ChatParser {
             }
 
             if (ItemPrices.isTrackedOre(baseName)) {
-                SkyblockProfitTracker.session.addOre(baseName, adjustedAmount);
+                SkyblockProfitTracker.session.addOre(baseName, adjustedAmount, lastSeconds);
                 foundSomething = true;
                 SkyblockProfitTracker.LOGGER.debug("Sack: {} x{} (raw: {} x{})",
                         baseName, adjustedAmount, fullItemName, rawAmount);

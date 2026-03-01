@@ -15,13 +15,16 @@ import java.util.List;
 
 /**
  * Renders the mining profit HUD overlay on screen.
- * Now supports configurable text colors, display toggles,
- * and gemstone rarity display.
+ *
+ * No title, no background — just clean text with full RGB color support
+ * and configurable scale via hudScale (scroll in HUD editor).
  */
 public class ProfitHudOverlay {
 
     private static final int LINE_HEIGHT = 11;
-    private static final int PADDING = 6;
+
+    /** A single colored text segment within a HUD line. */
+    public record TextSegment(String text, int rgb) {}
 
     public void register() {
         HudRenderCallback.EVENT.register(this::render);
@@ -40,85 +43,88 @@ public class ProfitHudOverlay {
 
         TextRenderer textRenderer = client.textRenderer;
 
-        List<String> lines = buildLines(session, config);
+        List<List<TextSegment>> lines = buildLines(session, config);
         if (lines.isEmpty()) return;
 
+        float scale = config.hudScale;
         int x = config.hudX;
         int y = config.hudY;
 
-        // Calculate max width for background
-        int maxWidth = 0;
-        for (String line : lines) {
-            int w = textRenderer.getWidth(line);
-            if (w > maxWidth) maxWidth = w;
-        }
+        // Apply scale via matrix transformation
+        context.getMatrices().push();
+        context.getMatrices().translate(x, y, 0);
+        context.getMatrices().scale(scale, scale, 1.0f);
 
-        int totalHeight = lines.size() * LINE_HEIGHT;
-
-        // Draw background with configured color
-        context.fill(x - PADDING, y - PADDING,
-                x + maxWidth + PADDING, y + totalHeight + PADDING,
-                config.bgColor);
-
-        // Accent line at top (salmon pink)
-        context.fill(x - PADDING, y - PADDING,
-                x + maxWidth + PADDING, y - PADDING + 2,
-                0xFFFA8072);
-
-        // Draw text lines
-        int lineY = y;
-        for (String line : lines) {
-            context.drawTextWithShadow(textRenderer, line, x, lineY, 0xFFFFFFFF);
+        int lineY = 0;
+        for (List<TextSegment> line : lines) {
+            int segX = 0;
+            for (TextSegment seg : line) {
+                context.drawTextWithShadow(textRenderer, seg.text, segX, lineY, 0xFF000000 | seg.rgb);
+                segX += textRenderer.getWidth(seg.text);
+            }
             lineY += LINE_HEIGHT;
         }
+
+        context.getMatrices().pop();
     }
 
-    private List<String> buildLines(ProfitSession session, ModConfig config) {
-        List<String> lines = new ArrayList<>();
+    /** Build all HUD lines as lists of colored text segments. */
+    public static List<List<TextSegment>> buildLines(ProfitSession session, ModConfig config) {
+        List<List<TextSegment>> lines = new ArrayList<>();
 
-        // Color code shortcuts
-        String tc = "\u00a7" + config.titleColor;    // title
-        String lc = "\u00a7" + config.labelColor;    // label
-        String vc = "\u00a7" + config.valueColor;    // value
-        String tmC = "\u00a7" + config.timeColor;    // time
-        String sc = "\u00a7" + config.separatorColor; // separator
+        int lc = config.labelColor;
+        int vc = config.valueColor;
+        int tc = config.timeColor;
+        int sc = config.separatorColor;
 
-        // Title
-        String pauseTag = session.isPaused() ? " \u00a7c(PAUSED)" : "";
-        lines.add(tc + "\u00a7l\u26cf Profit Tracker" + pauseTag);
-
-        if (config.showSeparators) {
-            lines.add(sc + "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
+        // Paused indicator (replaces old title)
+        if (session.isPaused()) {
+            lines.add(List.of(new TextSegment("(PAUSED)", 0xFF5555)));
         }
 
         if (config.showProfit) {
-            lines.add(lc + "Profit: " + vc + "$" + FormatUtil.formatWithCommas(session.getTotalProfit()));
+            lines.add(List.of(
+                    new TextSegment("Profit: ", lc),
+                    new TextSegment("$" + FormatUtil.formatWithCommas(session.getTotalProfit()), vc)
+            ));
         }
 
         if (config.showProfitPerHour) {
-            lines.add(lc + "$/hr: " + vc + "$" + FormatUtil.formatWithCommas(session.getProfitPerHour()));
+            lines.add(List.of(
+                    new TextSegment("$/hr: ", lc),
+                    new TextSegment("$" + FormatUtil.formatWithCommas(session.getProfitPerHour()), vc)
+            ));
         }
 
         if (config.showTime) {
-            lines.add(lc + "Time: " + tmC + FormatUtil.formatTime(session.getElapsedSeconds()));
+            lines.add(List.of(
+                    new TextSegment("Time: ", lc),
+                    new TextSegment(FormatUtil.formatTime(session.getElapsedSeconds()), tc)
+            ));
         }
 
         if (config.showItems) {
             long totalItems = session.getTotalOreItems() + session.getTotalGemstones();
-            lines.add(lc + "Items: " + tmC + FormatUtil.formatWithCommas(totalItems));
+            lines.add(List.of(
+                    new TextSegment("Items: ", lc),
+                    new TextSegment(FormatUtil.formatWithCommas(totalItems), tc)
+            ));
         }
 
         if (config.showItemBreakdown) {
             List<ProfitSession.ItemBreakdownEntry> topItems = session.getTopItems(config.maxBreakdownItems);
             if (!topItems.isEmpty()) {
                 if (config.showSeparators) {
-                    lines.add(sc + "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
+                    lines.add(List.of(new TextSegment("\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", sc)));
                 }
                 for (ProfitSession.ItemBreakdownEntry entry : topItems) {
-                    String color = entry.isGemstone() ? "\u00a7d" : "\u00a7f";
-                    lines.add(color + entry.name() + "\u00a77: " + vc + "$" +
-                            FormatUtil.formatNumber(entry.profit()) +
-                            " \u00a78(x" + FormatUtil.formatWithCommas(entry.count()) + ")");
+                    int nameColor = entry.isGemstone() ? 0xFF55FF : 0xFFFFFF;
+                    lines.add(List.of(
+                            new TextSegment(entry.name(), nameColor),
+                            new TextSegment(": ", 0xAAAAAA),
+                            new TextSegment("$" + FormatUtil.formatNumber(entry.profit()), vc),
+                            new TextSegment(" (x" + FormatUtil.formatWithCommas(entry.count()) + ")", 0x555555)
+                    ));
                 }
             }
         }
@@ -130,12 +136,14 @@ public class ProfitHudOverlay {
                 default -> " Flawed";
             };
             String mode = switch (config.pricingMode) {
-                case "bazaar_sell" -> sc + "[BZ Sell |" + tierName + "]";
-                case "bazaar_buy" -> sc + "[BZ Offer |" + tierName + "]";
-                case "npc" -> sc + "[NPC |" + tierName + "]";
+                case "bazaar_sell" -> "[BZ Sell |" + tierName + "]";
+                case "bazaar_buy" -> "[BZ Offer |" + tierName + "]";
+                case "npc" -> "[NPC |" + tierName + "]";
                 default -> "";
             };
-            lines.add(mode);
+            if (!mode.isEmpty()) {
+                lines.add(List.of(new TextSegment(mode, sc)));
+            }
         }
 
         return lines;

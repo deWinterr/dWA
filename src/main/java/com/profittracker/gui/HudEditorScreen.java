@@ -11,7 +11,7 @@ import net.minecraft.text.Text;
 
 /**
  * HUD editor screen that lets users drag the profit tracker HUD around
- * and scroll to resize. Inspired by NoammAddons' HudEditorScreen.
+ * and scroll to resize.
  *
  * - Left click + drag to move
  * - Scroll wheel to adjust scale
@@ -19,16 +19,15 @@ import net.minecraft.text.Text;
  */
 public class HudEditorScreen extends Screen {
 
-    private static final int ACCENT = 0xFFFA8072;
     private static final int BORDER_NORMAL = 0x40FFFFFF;
     private static final int BORDER_HOVER = 0xFFFA8072;
-    private static final int BG_PREVIEW = 0x96141414;
+    private static final int LINE_HEIGHT = 11;
 
     private boolean isDragging = false;
     private float dragOffsetX = 0;
     private float dragOffsetY = 0;
 
-    // Preview HUD dimensions (calculated during render)
+    // Preview HUD dimensions (calculated during render, in SCALED pixels)
     private int previewW = 120;
     private int previewH = 60;
 
@@ -47,63 +46,85 @@ public class HudEditorScreen extends Screen {
 
         ModConfig config = SkyblockProfitTracker.config;
         TextRenderer tr = textRenderer;
+        float scale = config.hudScale;
 
         // Dim background
         ctx.fill(0, 0, width, height, 0x60000000);
 
         int hudX = config.hudX;
         int hudY = config.hudY;
-        float scale = config.hudScale;
 
         // Handle dragging
         if (isDragging) {
-            config.hudX = Math.max(0, Math.min((int)(mouseX - dragOffsetX), width - previewW));
-            config.hudY = Math.max(0, Math.min((int)(mouseY - dragOffsetY), height - previewH));
+            config.hudX = Math.max(0, Math.min((int)(mouseX - dragOffsetX), width - (int)(previewW * scale)));
+            config.hudY = Math.max(0, Math.min((int)(mouseY - dragOffsetY), height - (int)(previewH * scale)));
             hudX = config.hudX;
             hudY = config.hudY;
         }
 
-        // Calculate preview box size
-        String[] previewLines = {
-                "\u00a76\u00a7l\u26cf Profit Tracker",
-                "\u00a78\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
-                "\u00a77Profit: \u00a7a$1,234,567",
-                "\u00a77$/hr: \u00a7a$4,567,890",
-                "\u00a77Time: \u00a7f1h 23m 45s",
-                "\u00a77Items: \u00a7f12,345",
-                "\u00a78[BZ Instant Sell]"
+        // Build preview lines (no title, no background — matches actual HUD)
+        String[][] previewSegments = {
+                {"Profit: ", "$1,234,567"},
+                {"$/hr: ", "$4,567,890"},
+                {"Time: ", "1h 23m 45s"},
+                {"Items: ", "12,345"},
+                {"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"},
+                {"Diamond: ", "$123K", " (x4,200)"},
+                {"[BZ Sell | Flawed]"}
+        };
+        int[][] previewColors = {
+                {config.labelColor, config.valueColor},
+                {config.labelColor, config.valueColor},
+                {config.labelColor, config.timeColor},
+                {config.labelColor, config.timeColor},
+                {config.separatorColor},
+                {0xFFFFFF, config.valueColor, 0x555555},
+                {config.separatorColor}
         };
 
-        int lineH = 11;
-        int padding = 4;
+        // Measure unscaled content size
         int maxLineW = 0;
-        for (String line : previewLines) {
-            int lw = tr.getWidth(line);
-            if (lw > maxLineW) maxLineW = lw;
+        for (String[] segs : previewSegments) {
+            int lineW = 0;
+            for (String s : segs) lineW += tr.getWidth(s);
+            if (lineW > maxLineW) maxLineW = lineW;
         }
-        previewW = maxLineW + padding * 2;
-        previewH = previewLines.length * lineH + padding * 2;
+        previewW = maxLineW;
+        previewH = previewSegments.length * LINE_HEIGHT;
 
-        // Check hover
-        boolean hovered = mouseX >= hudX - padding && mouseX <= hudX + previewW
-                && mouseY >= hudY - padding && mouseY <= hudY + previewH;
+        // Scaled bounding box for hit-testing
+        int scaledW = (int)(previewW * scale);
+        int scaledH = (int)(previewH * scale);
 
-        // Draw preview background
-        ctx.fill(hudX - padding, hudY - padding, hudX + previewW, hudY + previewH, BG_PREVIEW);
+        // Check hover against the scaled bounding box
+        boolean hovered = mouseX >= hudX && mouseX <= hudX + scaledW
+                && mouseY >= hudY && mouseY <= hudY + scaledH;
 
-        // Border
+        // Draw border around scaled area
         int borderColor = (isDragging || hovered) ? BORDER_HOVER : BORDER_NORMAL;
-        ctx.fill(hudX - padding, hudY - padding, hudX + previewW, hudY - padding + 1, borderColor);
-        ctx.fill(hudX - padding, hudY + previewH - 1, hudX + previewW, hudY + previewH, borderColor);
-        ctx.fill(hudX - padding, hudY - padding, hudX - padding + 1, hudY + previewH, borderColor);
-        ctx.fill(hudX + previewW - 1, hudY - padding, hudX + previewW, hudY + previewH, borderColor);
+        int pad = 2;
+        ctx.fill(hudX - pad, hudY - pad, hudX + scaledW + pad, hudY - pad + 1, borderColor);
+        ctx.fill(hudX - pad, hudY + scaledH + pad - 1, hudX + scaledW + pad, hudY + scaledH + pad, borderColor);
+        ctx.fill(hudX - pad, hudY - pad, hudX - pad + 1, hudY + scaledH + pad, borderColor);
+        ctx.fill(hudX + scaledW + pad - 1, hudY - pad, hudX + scaledW + pad, hudY + scaledH + pad, borderColor);
 
-        // Draw preview text
-        int ly = hudY;
-        for (String line : previewLines) {
-            ctx.drawTextWithShadow(tr, line, hudX, ly, 0xFFFFFFFF);
-            ly += lineH;
+        // Draw preview text at configured scale
+        ctx.getMatrices().push();
+        ctx.getMatrices().translate(hudX, hudY, 0);
+        ctx.getMatrices().scale(scale, scale, 1.0f);
+
+        int lineY = 0;
+        for (int i = 0; i < previewSegments.length; i++) {
+            int segX = 0;
+            for (int j = 0; j < previewSegments[i].length; j++) {
+                int color = (j < previewColors[i].length) ? previewColors[i][j] : 0xFFFFFF;
+                ctx.drawTextWithShadow(tr, previewSegments[i][j], segX, lineY, 0xFF000000 | color);
+                segX += tr.getWidth(previewSegments[i][j]);
+            }
+            lineY += LINE_HEIGHT;
         }
+
+        ctx.getMatrices().pop();
 
         // Draw element name when dragging
         if (isDragging) {
@@ -130,10 +151,12 @@ public class HudEditorScreen extends Screen {
     public boolean mouseClicked(Click click, boolean doubled) {
         if (click.button() == 0) {
             ModConfig config = SkyblockProfitTracker.config;
-            int padding = 4;
+            float scale = config.hudScale;
+            int scaledW = (int)(previewW * scale);
+            int scaledH = (int)(previewH * scale);
 
-            if (lastMouseX >= config.hudX - padding && lastMouseX <= config.hudX + previewW
-                    && lastMouseY >= config.hudY - padding && lastMouseY <= config.hudY + previewH) {
+            if (lastMouseX >= config.hudX && lastMouseX <= config.hudX + scaledW
+                    && lastMouseY >= config.hudY && lastMouseY <= config.hudY + scaledH) {
                 isDragging = true;
                 dragOffsetX = (float)(lastMouseX - config.hudX);
                 dragOffsetY = (float)(lastMouseY - config.hudY);

@@ -11,6 +11,7 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.Text;
+import net.minecraft.text.TextColor;
 
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
@@ -37,8 +38,6 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.lit
  *   /pt listprices           - List custom prices
  */
 public class TrackerCommand {
-
-    private static final String PREFIX = "\u00a76[ProfitTracker]\u00a7r ";
 
     public static void register() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
@@ -177,7 +176,7 @@ public class TrackerCommand {
                                             SkyblockProfitTracker.config.sessionTimeoutSeconds = secs;
                                             SkyblockProfitTracker.config.save();
                                             msg(ctx.getSource()::sendFeedback,
-                                                    "Session timeout set to \u00a7e" + secs + "s");
+                                                    "Session timeout set to \u00a7e" + secs + "s \u00a77(ores always use 60s minimum)");
                                             return 1;
                                         })))
 
@@ -240,7 +239,7 @@ public class TrackerCommand {
                                                         SkyblockProfitTracker.config.save();
                                                         msg(ctx.getSource()::sendFeedback,
                                                                 "\u00a7a" + FormatUtil.capitalize(item) + " \u00a77price set to \u00a7e$" +
-                                                                        FormatUtil.formatWithCommas((long) price) + " \u00a77per item");
+                                                                        FormatUtil.formatWithCommas(price.longValue()) + " \u00a77per item");
                                                     } catch (NumberFormatException e) {
                                                         msg(ctx.getSource()::sendFeedback, "\u00a7cInvalid price. Use a number.");
                                                     }
@@ -300,7 +299,7 @@ public class TrackerCommand {
         send.accept(Text.literal("\u00a7e/pt scale <0.5-3.0> \u00a77- HUD scale"));
         send.accept(Text.literal("\u00a7e/pt pricing <mode> \u00a77- npc/bazaar_sell/bazaar_buy"));
         send.accept(Text.literal("\u00a7e/pt gemstone <rarity> \u00a77- flawed/fine/flawless"));
-        send.accept(Text.literal("\u00a7e/pt timeout <seconds> \u00a77- Idle timeout (10-600)"));
+        send.accept(Text.literal("\u00a7e/pt timeout <seconds> \u00a77- Idle timeout (10-600, ores=60s fixed)"));
         send.accept(Text.literal("\u00a7e/pt breakdown \u00a77- Toggle item breakdown"));
         send.accept(Text.literal("\u00a7e/pt stats \u00a77- Show session stats in chat"));
         send.accept(Text.literal("\u00a7e/pt prices \u00a77- Force refresh Bazaar prices"));
@@ -310,7 +309,10 @@ public class TrackerCommand {
         send.accept(Text.literal("\u00a78Tracks ores via Sack messages + gems via PRISTINE! procs."));
     }
 
+    /** Send a message with configurable RGB [ProfitTracker] prefix. */
     private static void msg(java.util.function.Consumer<Text> send, String text) {
-        send.accept(Text.literal(PREFIX + text));
+        int rgb = SkyblockProfitTracker.config.chatPrefixColor;
+        Text prefix = Text.literal("[ProfitTracker]").styled(s -> s.withColor(TextColor.fromRgb(rgb)));
+        send.accept(Text.empty().append(prefix).append(Text.literal(" " + text)));
     }
 }

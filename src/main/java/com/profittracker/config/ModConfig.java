@@ -21,7 +21,8 @@ public class ModConfig {
     // Pricing mode: "bazaar_sell" (instant sell), "bazaar_buy" (sell offer), "npc"
     public String pricingMode = "bazaar_sell";
 
-    // Session timeout in seconds before auto-pausing
+    // Session timeout in seconds before auto-pausing (applies to gemstones;
+    // ores always use a fixed 60s timeout since sack messages arrive every ~30s)
     public int sessionTimeoutSeconds = 60;
 
     // Whether to show item breakdown on HUD
@@ -43,20 +44,18 @@ public class ModConfig {
     public boolean showItems = true;
     public boolean showPricingMode = true;
 
-    // --- Text color (Minecraft color code character, e.g. 'a' for green) ---
-    // Title color, value color, label color
-    public String titleColor = "6";       // gold
-    public String labelColor = "7";       // gray
-    public String valueColor = "a";       // green
-    public String timeColor = "f";        // white
-    public String separatorColor = "8";   // dark gray
+    // --- RGB colors (0xRRGGBB format, no alpha) ---
+    public int labelColor = 0xAAAAAA;       // gray
+    public int valueColor = 0x55FF55;       // green
+    public int timeColor = 0xFFFFFF;        // white
+    public int separatorColor = 0x555555;   // dark gray
+    public int chatPrefixColor = 0xFFAA00;  // gold — color of [ProfitTracker] in chat
 
     // --- Gemstone rarity for pricing ---
     // 1 = Flawed (default, from PRISTINE! drops), 2 = Fine, 3 = Flawless
     public int gemstoneRarity = 1;
 
     // --- HUD style ---
-    public int bgColor = 0x80000000;      // semi-transparent black
     public boolean showSeparators = true;
 
     // ----- Persistence -----
