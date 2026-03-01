@@ -136,8 +136,8 @@ public class ProfitHudOverlay {
                 default -> " Flawed";
             };
             String mode = switch (config.pricingMode) {
-                case "bazaar_sell" -> "[BZ Sell |" + tierName + "]";
-                case "bazaar_buy" -> "[BZ Offer |" + tierName + "]";
+                case "bazaar_sell" -> "[BZ Offer Sell |" + tierName + "]";
+                case "bazaar_buy" -> "[BZ Insta Sell |" + tierName + "]";
                 case "npc" -> "[NPC |" + tierName + "]";
                 default -> "";
             };
