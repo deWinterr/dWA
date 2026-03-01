@@ -1,6 +1,6 @@
 # Skyblock Profit Tracker — Fabric 1.21.10
 
-A client-side Fabric mod that tracks ore and gemstone mining profits in Hypixel SkyBlock.
+A client-side Fabric mod that tracks ore and gemstone mining profits in Hypixel SkyBlock. (msg dwjdw on dc for issues)
 
 ## Credits
 
@@ -75,7 +75,7 @@ Requires Java 21+.
 ./gradlew build
 ```
 
-Output: `build/libs/SkyblockProfitTracker-1.0.2.jar`
+Output: `build/libs/dWA-1.1.0.jar`
 
 ## Installing
 
