@@ -50,10 +50,10 @@ public class ProfitHudOverlay {
         int x = config.hudX;
         int y = config.hudY;
 
-        // Apply scale via matrix transformation
-        context.getMatrices().push();
-        context.getMatrices().translate(x, y, 0);
-        context.getMatrices().scale(scale, scale, 1.0f);
+        // Apply scale via matrix transformation (Matrix3x2fStack in 1.21.10)
+        context.getMatrices().pushMatrix();
+        context.getMatrices().translate(x, y);
+        context.getMatrices().scale(scale, scale);
 
         int lineY = 0;
         for (List<TextSegment> line : lines) {
@@ -65,7 +65,7 @@ public class ProfitHudOverlay {
             lineY += LINE_HEIGHT;
         }
 
-        context.getMatrices().pop();
+        context.getMatrices().popMatrix();
     }
 
     /** Build all HUD lines as lists of colored text segments. */

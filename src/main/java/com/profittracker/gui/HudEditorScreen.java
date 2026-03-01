@@ -108,10 +108,10 @@ public class HudEditorScreen extends Screen {
         ctx.fill(hudX - pad, hudY - pad, hudX - pad + 1, hudY + scaledH + pad, borderColor);
         ctx.fill(hudX + scaledW + pad - 1, hudY - pad, hudX + scaledW + pad, hudY + scaledH + pad, borderColor);
 
-        // Draw preview text at configured scale
-        ctx.getMatrices().push();
-        ctx.getMatrices().translate(hudX, hudY, 0);
-        ctx.getMatrices().scale(scale, scale, 1.0f);
+        // Draw preview text at configured scale (Matrix3x2fStack in 1.21.10)
+        ctx.getMatrices().pushMatrix();
+        ctx.getMatrices().translate(hudX, hudY);
+        ctx.getMatrices().scale(scale, scale);
 
         int lineY = 0;
         for (int i = 0; i < previewSegments.length; i++) {
@@ -124,7 +124,7 @@ public class HudEditorScreen extends Screen {
             lineY += LINE_HEIGHT;
         }
 
-        ctx.getMatrices().pop();
+        ctx.getMatrices().popMatrix();
 
         // Draw element name when dragging
         if (isDragging) {

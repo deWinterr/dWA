@@ -239,7 +239,7 @@ public class TrackerCommand {
                                                         SkyblockProfitTracker.config.save();
                                                         msg(ctx.getSource()::sendFeedback,
                                                                 "\u00a7a" + FormatUtil.capitalize(item) + " \u00a77price set to \u00a7e$" +
-                                                                        FormatUtil.formatWithCommas(price.longValue()) + " \u00a77per item");
+                                                                        FormatUtil.formatWithCommas((long) price) + " \u00a77per item");
                                                     } catch (NumberFormatException e) {
                                                         msg(ctx.getSource()::sendFeedback, "\u00a7cInvalid price. Use a number.");
                                                     }
