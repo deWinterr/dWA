@@ -57,7 +57,7 @@ public class SettingsScreen extends Screen {
         ModConfig config = SkyblockProfitTracker.config;
 
         // Build settings list
-        settings.add(new DropdownEntry("Pricing Mode", new String[]{"Bazaar Instant Sell", "Bazaar Sell Offer", "NPC Prices"},
+        settings.add(new DropdownEntry("Pricing Mode", new String[]{"Bazaar Sell Offer", "Bazaar Instant Sell", "NPC Prices"},
                 switch (config.pricingMode) {
                     case "bazaar_buy" -> 1;
                     case "npc" -> 2;
