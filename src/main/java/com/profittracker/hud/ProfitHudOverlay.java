@@ -15,17 +15,16 @@ import java.util.List;
 
 /**
  * Renders the mining profit HUD overlay on screen.
- * Combines BigDiamond's profitDisplay (profit, $/hr, items, time)
- * with BlingBling's coin tracker (uptime, $/hr display).
  *
- * 1.21.10 compatible: no MatrixStack push/pop/scale (removed in 1.21.9+).
- * Instead we pre-compute scaled coordinates and draw directly.
+ * No title, no background — just clean text with full RGB color support
+ * and configurable scale via hudScale (scroll in HUD editor).
  */
 public class ProfitHudOverlay {
 
     private static final int LINE_HEIGHT = 11;
-    private static final int PADDING = 4;
-    private static final int BG_COLOR = 0x80000000;
+
+    /** A single colored text segment within a HUD line. */
+    public record TextSegment(String text, int rgb) {}
 
     public void register() {
         HudRenderCallback.EVENT.register(this::render);
@@ -40,74 +39,112 @@ public class ProfitHudOverlay {
 
         MinecraftClient client = MinecraftClient.getInstance();
         if (client == null || client.player == null) return;
-
-        // Skip during F3 debug screen
         if (client.getDebugHud().shouldShowDebugHud()) return;
 
         TextRenderer textRenderer = client.textRenderer;
 
-        // Build all HUD lines
-        List<String> lines = buildLines(session, config);
+        List<List<TextSegment>> lines = buildLines(session, config);
         if (lines.isEmpty()) return;
 
+        float scale = config.hudScale;
         int x = config.hudX;
         int y = config.hudY;
 
-        // Calculate max width for background
-        int maxWidth = 0;
-        for (String line : lines) {
-            int w = textRenderer.getWidth(line);
-            if (w > maxWidth) maxWidth = w;
-        }
+        // Apply scale via matrix transformation (Matrix3x2fStack in 1.21.10)
+        context.getMatrices().pushMatrix();
+        context.getMatrices().translate(x, y);
+        context.getMatrices().scale(scale, scale);
 
-        int totalHeight = lines.size() * LINE_HEIGHT;
-
-        // Draw background
-        context.fill(x - PADDING, y - PADDING,
-                x + maxWidth + PADDING, y + totalHeight + PADDING,
-                BG_COLOR);
-
-        // Draw text lines
-        int lineY = y;
-        for (String line : lines) {
-            context.drawTextWithShadow(textRenderer, line, x, lineY, 0xFFFFFFFF);
+        int lineY = 0;
+        for (List<TextSegment> line : lines) {
+            int segX = 0;
+            for (TextSegment seg : line) {
+                context.drawTextWithShadow(textRenderer, seg.text, segX, lineY, 0xFF000000 | seg.rgb);
+                segX += textRenderer.getWidth(seg.text);
+            }
             lineY += LINE_HEIGHT;
         }
+
+        context.getMatrices().popMatrix();
     }
 
-    private List<String> buildLines(ProfitSession session, ModConfig config) {
-        List<String> lines = new ArrayList<>();
+    /** Build all HUD lines as lists of colored text segments. */
+    public static List<List<TextSegment>> buildLines(ProfitSession session, ModConfig config) {
+        List<List<TextSegment>> lines = new ArrayList<>();
 
-        String pauseTag = session.isPaused() ? " \u00a7c(PAUSED)" : "";
-        lines.add("\u00a76\u00a7l\u26cf Profit Tracker" + pauseTag);
-        lines.add("\u00a78\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
-        lines.add("\u00a77Profit: \u00a7a$" + FormatUtil.formatWithCommas(session.getTotalProfit()));
-        lines.add("\u00a77$/hr: \u00a7a$" + FormatUtil.formatWithCommas(session.getProfitPerHour()));
-        lines.add("\u00a77Time: \u00a7f" + FormatUtil.formatTime(session.getElapsedSeconds()));
+        int lc = config.labelColor;
+        int vc = config.valueColor;
+        int tc = config.timeColor;
+        int sc = config.separatorColor;
 
-        long totalItems = session.getTotalOreItems() + session.getTotalGemstones();
-        lines.add("\u00a77Items: \u00a7f" + FormatUtil.formatWithCommas(totalItems));
+        // Paused indicator (replaces old title)
+        if (session.isPaused()) {
+            lines.add(List.of(new TextSegment("(PAUSED)", 0xFF5555)));
+        }
+
+        if (config.showProfit) {
+            lines.add(List.of(
+                    new TextSegment("Profit: ", lc),
+                    new TextSegment("$" + FormatUtil.formatWithCommas(session.getTotalProfit()), vc)
+            ));
+        }
+
+        if (config.showProfitPerHour) {
+            lines.add(List.of(
+                    new TextSegment("$/hr: ", lc),
+                    new TextSegment("$" + FormatUtil.formatWithCommas(session.getProfitPerHour()), vc)
+            ));
+        }
+
+        if (config.showTime) {
+            lines.add(List.of(
+                    new TextSegment("Time: ", lc),
+                    new TextSegment(FormatUtil.formatTime(session.getElapsedSeconds()), tc)
+            ));
+        }
+
+        if (config.showItems) {
+            long totalItems = session.getTotalOreItems() + session.getTotalGemstones();
+            lines.add(List.of(
+                    new TextSegment("Items: ", lc),
+                    new TextSegment(FormatUtil.formatWithCommas(totalItems), tc)
+            ));
+        }
 
         if (config.showItemBreakdown) {
             List<ProfitSession.ItemBreakdownEntry> topItems = session.getTopItems(config.maxBreakdownItems);
             if (!topItems.isEmpty()) {
-                lines.add("\u00a78\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
+                if (config.showSeparators) {
+                    lines.add(List.of(new TextSegment("\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", sc)));
+                }
                 for (ProfitSession.ItemBreakdownEntry entry : topItems) {
-                    String color = entry.isGemstone() ? "\u00a7d" : "\u00a7f";
-                    lines.add(color + entry.name() + "\u00a77: \u00a7a$" +
-                            FormatUtil.formatNumber(entry.profit()) +
-                            " \u00a78(x" + FormatUtil.formatWithCommas(entry.count()) + ")");
+                    int nameColor = entry.isGemstone() ? 0xFF55FF : 0xFFFFFF;
+                    lines.add(List.of(
+                            new TextSegment(entry.name(), nameColor),
+                            new TextSegment(": ", 0xAAAAAA),
+                            new TextSegment("$" + FormatUtil.formatNumber(entry.profit()), vc),
+                            new TextSegment(" (x" + FormatUtil.formatWithCommas(entry.count()) + ")", 0x555555)
+                    ));
                 }
             }
         }
 
-        String mode = switch (config.pricingMode) {
-            case "bazaar_sell" -> "\u00a78[BZ Instant Sell]";
-            case "bazaar_buy" -> "\u00a78[BZ Sell Offer]";
-            case "npc" -> "\u00a78[NPC Prices]";
-            default -> "";
-        };
-        lines.add(mode);
+        if (config.showPricingMode) {
+            String tierName = switch (config.gemstoneRarity) {
+                case 2 -> " Fine";
+                case 3 -> " Flawless";
+                default -> " Flawed";
+            };
+            String mode = switch (config.pricingMode) {
+                case "bazaar_sell" -> "[BZ Sell |" + tierName + "]";
+                case "bazaar_buy" -> "[BZ Offer |" + tierName + "]";
+                case "npc" -> "[NPC |" + tierName + "]";
+                default -> "";
+            };
+            if (!mode.isEmpty()) {
+                lines.add(List.of(new TextSegment(mode, sc)));
+            }
+        }
 
         return lines;
     }

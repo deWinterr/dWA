@@ -12,9 +12,13 @@ import java.util.concurrent.*;
 
 /**
  * Fetches and caches Bazaar prices from the Hypixel API.
- * Mirrors BlingBling's updateGemCosts() which queries api.hypixel.net/skyblock/bazaar.
  *
- * Also fetches ore prices from Bazaar where available (e.g., enchanted diamonds).
+ * Stores BOTH instant-sell and sell-offer prices so the user can switch
+ * pricing modes without needing a re-fetch.
+ *
+ * Hypixel Bazaar API quick_status fields:
+ *   sellPrice = price of the lowest sell order (what you pay to INSTANT BUY)
+ *   buyPrice  = price of the highest buy order (what you get to INSTANT SELL)
  */
 public class BazaarPriceFetcher {
 
@@ -23,16 +27,22 @@ public class BazaarPriceFetcher {
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
-    // Product ID -> price (instant sell or sell offer depending on config)
-    private final ConcurrentHashMap<String, Double> bazaarPrices = new ConcurrentHashMap<>();
+    // Product ID -> instant sell price (buyPrice in API = what you get selling instantly)
+    private final ConcurrentHashMap<String, Double> instantSellPrices = new ConcurrentHashMap<>();
+    // Product ID -> sell offer price (sellPrice in API = what sellers offer, you compete with them)
+    private final ConcurrentHashMap<String, Double> sellOfferPrices = new ConcurrentHashMap<>();
+
     private long lastFetchTime = 0;
     private boolean fetching = false;
 
     /**
      * Get the best price for a gemstone at a given tier.
-     * Returns max(npcPrice, bazaarPrice) like BlingBling does.
+     * Priority: custom price > Bazaar > NPC.
      */
     public double getGemstonePrice(String gemName, int tier) {
+        Double custom = SkyblockProfitTracker.config.customPrices.get(gemName.toLowerCase());
+        if (custom != null) return custom;
+
         double npc = ItemPrices.gemstoneNpcPrice(tier);
 
         String mode = SkyblockProfitTracker.config.pricingMode;
@@ -41,7 +51,7 @@ public class BazaarPriceFetcher {
         }
 
         String productId = ItemPrices.gemstoneBazaarId(gemName, tier);
-        Double bz = bazaarPrices.get(productId);
+        Double bz = getBazaarPrice(productId, mode);
         if (bz != null) {
             return Math.max(npc, bz);
         }
@@ -49,21 +59,37 @@ public class BazaarPriceFetcher {
     }
 
     /**
-     * Get the Bazaar price for an ore product ID, or fall back to NPC price.
+     * Get the price for an ore item.
+     * Priority: custom price > Bazaar > NPC.
      */
     public double getOrePrice(String itemNameLower) {
+        Double custom = SkyblockProfitTracker.config.customPrices.get(itemNameLower);
+        if (custom != null) return custom;
+
         double npc = ItemPrices.ORE_NPC_PRICES.getOrDefault(itemNameLower, 0.0);
 
         String mode = SkyblockProfitTracker.config.pricingMode;
         if ("npc".equals(mode)) return npc;
 
-        // Try common Bazaar IDs for ores
         String bzId = oreToBazaarId(itemNameLower);
         if (bzId != null) {
-            Double bz = bazaarPrices.get(bzId);
+            Double bz = getBazaarPrice(bzId, mode);
             if (bz != null) return Math.max(npc, bz);
         }
         return npc;
+    }
+
+    /**
+     * Returns the correct cached price for a product based on the pricing mode.
+     */
+    private Double getBazaarPrice(String productId, String mode) {
+        if ("bazaar_buy".equals(mode)) {
+            // Sell offer: user places a sell order, competing with other sellers
+            return sellOfferPrices.get(productId);
+        } else {
+            // Instant sell: user accepts the highest buy order
+            return instantSellPrices.get(productId);
+        }
     }
 
     /**
@@ -112,7 +138,7 @@ public class BazaarPriceFetcher {
                 if (response.statusCode() == 200) {
                     parseBazaarResponse(response.body());
                     lastFetchTime = System.currentTimeMillis();
-                    SkyblockProfitTracker.LOGGER.info("Bazaar prices updated ({} products)", bazaarPrices.size());
+                    SkyblockProfitTracker.LOGGER.info("Bazaar prices updated ({} products)", instantSellPrices.size());
                 } else {
                     SkyblockProfitTracker.LOGGER.warn("Bazaar API returned status {}", response.statusCode());
                 }
@@ -129,7 +155,6 @@ public class BazaarPriceFetcher {
             JsonObject root = JsonParser.parseString(json).getAsJsonObject();
             if (!root.has("products")) return;
 
-            boolean useSellOffer = "bazaar_buy".equals(SkyblockProfitTracker.config.pricingMode);
             JsonObject products = root.getAsJsonObject("products");
 
             for (Map.Entry<String, JsonElement> entry : products.entrySet()) {
@@ -139,17 +164,16 @@ public class BazaarPriceFetcher {
                 if (!product.has("quick_status")) continue;
                 JsonObject qs = product.getAsJsonObject("quick_status");
 
-                double price;
-                if (useSellOffer) {
-                    // "buyPrice" = price at which buy orders exist (what you get from sell offer)
-                    price = qs.has("buyPrice") ? qs.get("buyPrice").getAsDouble() : 0;
-                } else {
-                    // "sellPrice" = instant sell price
-                    price = qs.has("sellPrice") ? qs.get("sellPrice").getAsDouble() : 0;
-                }
+                // buyPrice = highest buy order = what you get when you INSTANT SELL
+                double instSell = qs.has("buyPrice") ? qs.get("buyPrice").getAsDouble() : 0;
+                // sellPrice = lowest sell order = what sellers offer (you compete to SELL OFFER)
+                double sellOffer = qs.has("sellPrice") ? qs.get("sellPrice").getAsDouble() : 0;
 
-                if (price > 0) {
-                    bazaarPrices.put(productId, price);
+                if (instSell > 0) {
+                    instantSellPrices.put(productId, instSell);
+                }
+                if (sellOffer > 0) {
+                    sellOfferPrices.put(productId, sellOffer);
                 }
             }
         } catch (Exception e) {
@@ -158,7 +182,7 @@ public class BazaarPriceFetcher {
     }
 
     public boolean hasPrices() {
-        return !bazaarPrices.isEmpty();
+        return !instantSellPrices.isEmpty();
     }
 
     public long getLastFetchTime() {

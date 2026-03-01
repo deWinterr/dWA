@@ -36,8 +36,9 @@ public class ChatParser {
     );
 
     // Regex for individual items in sack hover text
+    // Captures "+AMOUNT ITEM_NAME" - item name may or may not be followed by (...)
     private static final Pattern SACK_ITEM_PATTERN = Pattern.compile(
-            "\\+(\\d[\\d,]*) (.+?) \\("
+            "\\+(\\d[\\d,]*)\\s+(.+)"
     );
 
     // Regex for PRISTINE! messages
@@ -104,7 +105,9 @@ public class ChatParser {
             if (!itemMatch.find()) continue;
 
             long rawAmount = Long.parseLong(itemMatch.group(1).replace(",", ""));
-            String fullItemName = itemMatch.group(2).trim();
+            // Strip any trailing parenthetical like "(+1 Enchanted Diamond)" or "(COMPACTED)"
+            String fullItemName = itemMatch.group(2).replaceFirst("\\s*\\(.*", "").trim();
+            if (fullItemName.isEmpty()) continue;
 
             String baseName = fullItemName
                     .toLowerCase()
@@ -121,7 +124,7 @@ public class ChatParser {
             }
 
             if (ItemPrices.isTrackedOre(baseName)) {
-                SkyblockProfitTracker.session.addOre(baseName, adjustedAmount);
+                SkyblockProfitTracker.session.addOre(baseName, adjustedAmount, lastSeconds);
                 foundSomething = true;
                 SkyblockProfitTracker.LOGGER.debug("Sack: {} x{} (raw: {} x{})",
                         baseName, adjustedAmount, fullItemName, rawAmount);
