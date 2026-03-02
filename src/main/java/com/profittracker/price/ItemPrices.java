@@ -29,6 +29,7 @@ public class ItemPrices {
         ORE_NPC_PRICES.put("glacite", 4.5);
         ORE_NPC_PRICES.put("umber", 3.0);
         ORE_NPC_PRICES.put("tungsten", 3.0);
+        ORE_NPC_PRICES.put("nether quartz", 4.0);
     }
 
     /**

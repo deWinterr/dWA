@@ -112,6 +112,7 @@ public class BazaarPriceFetcher {
             case "glacite" -> "GLACITE";
             case "umber" -> "UMBER";
             case "tungsten" -> "TUNGSTEN";
+            case "nether quartz" -> "QUARTZ";
             default -> null;
         };
     }
