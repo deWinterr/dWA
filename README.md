@@ -58,7 +58,7 @@ All commands use `/pt` (or `/profittracker`).
 ## Tracked Items
 
 ### Ores
-Diamond, Coal, Iron, Gold, Emerald, Lapis, Redstone, Obsidian, Mithril, Titanium, End Stone, Glacite, Umber, Tungsten.
+Diamond, Coal, Iron, Gold, Emerald, Lapis, Redstone, Obsidian, Mithril, Titanium, End Stone, Glacite, Umber, Tungsten, Quartz.
 
 Detected from `[Sacks] +X items. (Last Ys.)` chat messages. Hover text is parsed for individual item types. Enchanted items are multiplied by 160, enchanted blocks by 160x160.
 
